@@ -1,1 +1,12 @@
-modify grammar so it can be top down parsed
+modify grammar so it can be top down parsed w/out backtracking.
+
+backtracking easier to implement, but less efficient. Run time of backtrack free is linear wrt sentence length, whereas
+w/ backtracking it can be have on^2 growth (?) pg 98 algo
+'Backtracking
+increases the asymptotic cost of parsing; in practice, it is an expensive
+way to discover syntax errors.' pg97
+
+eliminate left recursion so top down parsing is possible. a backtracking solution would work at this point, albeit inefficiently. then doing predictive just makes it more efficient.
+
+'The major source of inefficiency in the leftmost, top-down parser arises from
+its need to backtrack.' pg 103
