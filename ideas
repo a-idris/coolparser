@@ -10,3 +10,6 @@ eliminate left recursion so top down parsing is possible. a backtracking solutio
 
 'The major source of inefficiency in the leftmost, top-down parser arises from
 its need to backtrack.' pg 103
+
+
+Necessary to convert the grammar to ll(1) form. Can confirm by checking for conflicts whether it is in fact in ll(1) form.
