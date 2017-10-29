@@ -20,10 +20,24 @@ def parse(filename):
         input_file = f.read()
         lexer = shlex.shlex(input_file)
         lexer.whitespace_split = True
+        lexer.quotes = ''  # disable shlex quote behaviour
+        """
+        #wordchars indicates the chars that shlex will build on
+        symbols = [";", ",", ":", "{", "}", "(", ")", "<-", "@", ".", "=>", "+", "-", "~", "*", "/", "<=", "<", "=", "\\"]
+        lexer.wordchars += ''.join(set(''.join(symbols))) #add the unique chars that compose the different symbols to wordchars
+        lexer.quotes = '' 
+        lexer.punctuation_chars = '' #shlex will split only on whitespace and quotes.
+        """
+
         while True:
             # use shlex lexeme splitter, it will split alphanumeric (with _), and individual punctuation symbols.
             # need to slightly modifty so that it matches multichar cool symbols as tokens (e.g. => as => not =,>)
             lexeme = lexer.get_token()
+
+            while lexeme.count('"') == 1:
+                # if there is an unmatched quote, append shlex tokens until the lexeme has a matched quote
+                lexeme += lexer.get_token()
+
             # print("<{0}>".format(lexeme), end=', ')
             if lexeme == lexer.eof:
                 break
@@ -45,7 +59,7 @@ def initialise_patterns():
     token_patterns = collections.OrderedDict()
 
     # case insensitive keywords
-    case_insensitive_keywords = ["class", "else", "fi", "if", "in", "inherits", "isvoid", "let",
+    case_insensitive_keywords = ["class", "else", "fi", "if", "inherits", "in", "isvoid", "let",
                                  "loop", "pool", "then", "while", "case", "esac",  "new", "of", "not"]
     for kw in case_insensitive_keywords:
         regex = re.compile(match_full_str(kw), re.IGNORECASE)
@@ -60,8 +74,7 @@ def initialise_patterns():
         token_patterns[kw] = regex
 
     # add recognizers for symbols
-    symbols = [";", ",", ":", "{", "}", "(", ")",
-               "<-", "@", ".", "=>", "+", "-", "~", "*", "/", "<=", "<", "="]
+    symbols = [";", ",", ":", "{", "}", "(", ")", "<-", "@", ".", "=>", "+", "-", "~", "*", "/", "<=", "<", "="]
     # can group by precedence e.g. addop, mulop, etc. also, consider 'full' string matching,
     # since = will match for <= and =>.
     # maybe just solve w/ ordering? or do "^{0}$".format(pattern)
@@ -102,28 +115,71 @@ def initialise_patterns():
 def match_pattern(lexeme, patterns, lexer):
     """
     in order of importance
+    find longest match from al the different regexes, tie break based on the index of the regex in the ordereddict
     """
 
+    matches = []
     for token_name, regex in patterns.items():
         result = regex.match(lexeme)
         if result:
             matched_str = result.group()
-            if len(matched_str) != len(lexeme):
-                rest = lexeme[len(matched_str):]
-                lexer.push_token(rest)
-            print("<{0}>".format(token_name), end=' ')
-            return token_name
+            matches.append((token_name, matched_str))  # append str and match object tuple
 
     # if no matches, it's not a valid lexeme. raise error
-    raise LexError
+    if len(matches) == 0:
+        raise LexError
+
+    # find max based on length of matched string. if multiple of same value, max returns the first one so there is
+    # automatic tiebreaking based on the insertion order in the OrderedDict
+    result_tuple = max(matches, key=lambda item: len(item[1]))
+    token_name = result_tuple[0]
+    matched_str = result_tuple[1]
+    if len(matched_str) != len(lexeme):
+        rest = lexeme[len(matched_str):]
+        lexer.push_token(rest)
+    print("<{0}, {1}>".format(token_name, matched_str), end=' ')
+    return token_name
+
+
+def program():
+    pass
+
+
+def _class():
+    pass
+
+
+def feature():
+    pass
+
+
+def formal():
+    pass
+
+def next_word():
+
 
 
 if __name__ == "__main__":
     parse(sys.argv[1])
 
 """
-def is_match(token_name):
-    pass
+    Grammar:
+    PROGRAM ->  CLASS *
+
+    PROGRAM -> PROGRAM'
+    PROGRAM' -> CLASS PROGRAM' | eps
+
+    CLASS -> 'class' Name ('inherits' Type)? '{' FEATURE_LIST '}' ';'
+    CLASS_TYPE -> eps | 'inherits' Type
+    FEATURE_LIST -> FEATURE_SINGLE FEATURE_LIST_PRIME
+    FEATURE_LIST_PRIME -> 
+    FEATURE-> ATTRIBUTE | METHOD
+    ATTRIBUTE -> Id ':' Type ';'
+    METHOD ->  Id '(' ARGSLIST ')' ':' Type {' METHOD_BODY '}'
+    ARGSLIST -> ARG ARGSLIST | eps
+    ARG -> Id ':' Type
+    METHOD_BODY -> STATEMENT METHOD_BODY | eps
 
 def getToken():
     #regexs
@@ -146,22 +202,7 @@ def start():
 
     ----
 
-    Grammar:
-    PROGRAM ->  CLASS *
 
-    PROGRAM -> PROGRAM'
-    PROGRAM' -> CLASS PROGRAM' | eps
-
-    CLASS -> 'class' Name ('inherits' Type)? '{' FEATURE_LIST '}' ';'
-    CLASS_TYPE -> eps | 'inherits' Type
-    FEATURE_LIST -> FEATURE_SINGLE FEATURE_LIST_PRIME
-    FEATURE_LIST_PRIME -> 
-    FEATURE-> ATTRIBUTE | METHOD
-    ATTRIBUTE -> Id ':' Type ';'
-    METHOD ->  Id '(' ARGSLIST ')' ':' Type {' METHOD_BODY '}'
-    ARGSLIST -> ARG ARGSLIST | eps
-    ARG -> Id ':' Type
-    METHOD_BODY -> STATEMENT METHOD_BODY | eps
 
 
     ""

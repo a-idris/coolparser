@@ -20,3 +20,8 @@ difficulty
 		revert to shlex's whitespace split only, ie id(id2) would be passed as one string from shlex's gettoken and then do partial matches based on the token_patterns. the longest should win - maximal munch. then pass that partial to the parser and put the remainder back onto the shlex stack w/ pushtoken. had some issues w/ maximal munch. however, i really only bneeded to solve it for operators e.g. ->, -, >. i used an ordereddict so that rules considered in some order. if i put the 'longest' rule first, it should alwatys get the longest munch and thus be correct. only had to worry about tokens because  the others were disjoint. also, bvy default it's greedy so if the longest rule gets it then it will get the longest tokjen,.
 
 		had some issues reconciling length precednece w/ operator prcedence. e.g. - is higher precedence than -> but -> is a longer rule.
+		
+		
+		the way shlex handles strings. doesn't recognise quotes when it's part of a word. e.g. won't discern word"string"word. usually strings are in between punctuation, but if it encounters 
+		
+		drawback - doesn't preserve whitespace in strings.but since only concerned with syntax in this assignment, considered a necessary
