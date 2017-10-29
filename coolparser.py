@@ -19,15 +19,15 @@ def parse(filename):
     with open(filename) as f:
         input_file = f.read()
         lexer = shlex.shlex(input_file)
-        #lexer.whitespace_split = True
+        lexer.whitespace_split = True
         while True:
             # use shlex lexeme splitter, it will split alphanumeric (with _), and individual punctuation symbols.
             # need to slightly modifty so that it matches multichar cool symbols as tokens (e.g. => as => not =,>)
             lexeme = lexer.get_token()
-            print("<{0}>".format(lexeme), end=', ')
+            # print("<{0}>".format(lexeme), end=', ')
             if lexeme == lexer.eof:
                 break
-            match_pattern(lexeme, patterns)
+            match_pattern(lexeme, patterns, lexer)
 
         # set global pointer, manipulating w/ getToken
         # stream tokens to parse method
@@ -36,21 +36,20 @@ def parse(filename):
 
 
 def match_full_str(pattern):
-    return "^({0})$".format(pattern)
+    return pattern
+    # return "^({0})$".format(pattern)
 
 
 def initialise_patterns():
-    # orderedDict, so considers in order of insertion. add patterns in order of precedence.
-    patterns = collections.OrderedDict()
+    # orderedDict, so considers in order of insertion. add token_patterns in order of precedence.
+    token_patterns = collections.OrderedDict()
 
     # case insensitive keywords
     case_insensitive_keywords = ["class", "else", "fi", "if", "in", "inherits", "isvoid", "let",
                                  "loop", "pool", "then", "while", "case", "esac",  "new", "of", "not"]
     for kw in case_insensitive_keywords:
-        # deal w/ case sensitivity
         regex = re.compile(match_full_str(kw), re.IGNORECASE)
-        # regex = re.compile(kw, re.CASE_INSENSITIVE) and CASE_SENSITIVE option for t/f
-        patterns[kw] = regex
+        token_patterns[kw] = regex
 
     # case sensitive keywords. first letter must be lower case, rest insensitive
     case_sensitive_keywords = ["false", "true"]
@@ -58,55 +57,61 @@ def initialise_patterns():
         # craft correct pattern from kw e.g. f(a|A)(l|L)(s|S)(e|E)
         adjusted_kw = kw[0] + ''.join(["({0}|{1})".format(letter, letter.upper()) for letter in kw[1:]])
         regex = re.compile(match_full_str(adjusted_kw))  # encoding as string-escape makes it evaluated as raw string
-        patterns[kw] = regex
+        token_patterns[kw] = regex
 
     # add recognizers for symbols
-    symbols = [";", ",", ":", "{", "}", "(", ")", "<-", "@", ".", "=>", "+", "-", "~", "*", "/", "<=", "<", "="]
+    symbols = [";", ",", ":", "{", "}", "(", ")",
+               "<-", "@", ".", "=>", "+", "-", "~", "*", "/", "<=", "<", "="]
     # can group by precedence e.g. addop, mulop, etc. also, consider 'full' string matching,
     # since = will match for <= and =>.
     # maybe just solve w/ ordering? or do "^{0}$".format(pattern)
     for symbol in symbols:
         regex = re.compile(match_full_str(re.escape(symbol)))
-        patterns[symbol] = regex
+        token_patterns[symbol] = regex
 
     # integers
     regex = re.compile(match_full_str(r"[0-9]+"))
-    patterns["integer"] = regex
+    token_patterns["integer"] = regex
 
     # special notation: self and SELF_TYPE
     regex = re.compile(match_full_str(r"self"))
-    patterns["self"] = regex
+    token_patterns["self"] = regex
 
     regex = re.compile(match_full_str(r"SELF_TYPE"))
-    patterns["self_type"] = regex
+    token_patterns["self_type"] = regex
 
     # type identifier
     regex = re.compile(match_full_str(r"[A-Z][A-Za-z0-9_]*"))
-    patterns["type_id"] = regex
+    token_patterns["type_id"] = regex
 
     # object identifier
     regex = re.compile(match_full_str(r"[a-z][A-Za-z0-9_]*"))
-    patterns["object_id"] = regex
+    token_patterns["object_id"] = regex
 
     # strings
     regex = re.compile(match_full_str(r'"(.*?)"'), re.VERBOSE)
-    patterns["string"] = regex
+    token_patterns["string"] = regex
 
     # whitespace
     regex = re.compile(match_full_str(r"\s"))
-    patterns["whitespace"] = regex
+    token_patterns["whitespace"] = regex
 
-    return patterns
+    return token_patterns
 
 
-def match_pattern(lexeme, patterns):
+def match_pattern(lexeme, patterns, lexer):
     """
     in order of importance
     """
 
     for token_name, regex in patterns.items():
-        if regex.match(lexeme):
-            # print("<{0}>".format(token_name), end=' ')
+        result = regex.match(lexeme)
+        if result:
+            matched_str = result.group()
+            if len(matched_str) != len(lexeme):
+                rest = lexeme[len(matched_str):]
+                lexer.push_token(rest)
+            print("<{0}>".format(token_name), end=' ')
             return token_name
 
     # if no matches, it's not a valid lexeme. raise error

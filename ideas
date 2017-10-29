@@ -13,3 +13,10 @@ its need to backtrack.' pg 103
 
 
 Necessary to convert the grammar to ll(1) form. Can confirm by checking for conflicts whether it is in fact in ll(1) form.
+
+difficulty
+	in lexing
+		wanted to use shlexing completely, it would split based on alnum words or symbols e.g. id(id2) would split correctly as id, (, id2, ). however, it would split token symbol <= as <, =. Couldn't figure out an easy solution so had to 
+		revert to shlex's whitespace split only, ie id(id2) would be passed as one string from shlex's gettoken and then do partial matches based on the token_patterns. the longest should win - maximal munch. then pass that partial to the parser and put the remainder back onto the shlex stack w/ pushtoken. had some issues w/ maximal munch. however, i really only bneeded to solve it for operators e.g. ->, -, >. i used an ordereddict so that rules considered in some order. if i put the 'longest' rule first, it should alwatys get the longest munch and thus be correct. only had to worry about tokens because  the others were disjoint. also, bvy default it's greedy so if the longest rule gets it then it will get the longest tokjen,.
+
+		had some issues reconciling length precednece w/ operator prcedence. e.g. - is higher precedence than -> but -> is a longer rule.
