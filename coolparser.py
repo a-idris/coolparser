@@ -1,33 +1,144 @@
-import shlex
 import sys
+import shlex
+import re
+import collections
 
-#first, follow, firstplus
-#recursive descent class - if valid, store. recursive descent method - if valid, store.
-#if valid, print stored
+
+# first, follow, firstplus
+# recursive descent class - if valid, store. recursive descent method - if valid, store.
+# if valid, print stored
+class LexError(Exception):
+    pass
 
 
 def parse(filename):
-    
-    #open file
+
+    # initialise patterns
+    patterns = initialise_patterns()
+    # open file
     with open(filename) as f:
-        inputfile = f.read()
-        lexer = shlex.shlex(inputfile)
+        input_file = f.read()
+        lexer = shlex.shlex(input_file)
+        #lexer.whitespace_split = True
+        while True:
+            # use shlex lexeme splitter, it will split alphanumeric (with _), and individual punctuation symbols.
+            # need to slightly modifty so that it matches multichar cool symbols as tokens (e.g. => as => not =,>)
+            lexeme = lexer.get_token()
+            print("<{0}>".format(lexeme), end=', ')
+            if lexeme == lexer.eof:
+                break
+            match_pattern(lexeme, patterns)
+
         # set global pointer, manipulating w/ getToken
-        #stream tokens to parse method
+        # stream tokens to parse method
 
-    #for more accurate error reporting can loop over readline, maintaine line num. char within shlex gives index
+    # for more accurate error reporting can loop over readline, maintaine line num. char within shlex gives index
 
-    start()
+
+def match_full_str(pattern):
+    return "^({0})$".format(pattern)
+
+
+def initialise_patterns():
+    # orderedDict, so considers in order of insertion. add patterns in order of precedence.
+    patterns = collections.OrderedDict()
+
+    # case insensitive keywords
+    case_insensitive_keywords = ["class", "else", "fi", "if", "in", "inherits", "isvoid", "let",
+                                 "loop", "pool", "then", "while", "case", "esac",  "new", "of", "not"]
+    for kw in case_insensitive_keywords:
+        # deal w/ case sensitivity
+        regex = re.compile(match_full_str(kw), re.IGNORECASE)
+        # regex = re.compile(kw, re.CASE_INSENSITIVE) and CASE_SENSITIVE option for t/f
+        patterns[kw] = regex
+
+    # case sensitive keywords. first letter must be lower case, rest insensitive
+    case_sensitive_keywords = ["false", "true"]
+    for kw in case_sensitive_keywords:
+        # craft correct pattern from kw e.g. f(a|A)(l|L)(s|S)(e|E)
+        adjusted_kw = kw[0] + ''.join(["({0}|{1})".format(letter, letter.upper()) for letter in kw[1:]])
+        regex = re.compile(match_full_str(adjusted_kw))  # encoding as string-escape makes it evaluated as raw string
+        patterns[kw] = regex
+
+    # add recognizers for symbols
+    symbols = [";", ",", ":", "{", "}", "(", ")", "<-", "@", ".", "=>", "+", "-", "~", "*", "/", "<=", "<", "="]
+    # can group by precedence e.g. addop, mulop, etc. also, consider 'full' string matching,
+    # since = will match for <= and =>.
+    # maybe just solve w/ ordering? or do "^{0}$".format(pattern)
+    for symbol in symbols:
+        regex = re.compile(match_full_str(re.escape(symbol)))
+        patterns[symbol] = regex
+
+    # integers
+    regex = re.compile(match_full_str(r"[0-9]+"))
+    patterns["integer"] = regex
+
+    # special notation: self and SELF_TYPE
+    regex = re.compile(match_full_str(r"self"))
+    patterns["self"] = regex
+
+    regex = re.compile(match_full_str(r"SELF_TYPE"))
+    patterns["self_type"] = regex
+
+    # type identifier
+    regex = re.compile(match_full_str(r"[A-Z][A-Za-z0-9_]*"))
+    patterns["type_id"] = regex
+
+    # object identifier
+    regex = re.compile(match_full_str(r"[a-z][A-Za-z0-9_]*"))
+    patterns["object_id"] = regex
+
+    # strings
+    regex = re.compile(match_full_str(r'"(.*?)"'), re.VERBOSE)
+    patterns["string"] = regex
+
+    # whitespace
+    regex = re.compile(match_full_str(r"\s"))
+    patterns["whitespace"] = regex
+
+    return patterns
+
+
+def match_pattern(lexeme, patterns):
+    """
+    in order of importance
+    """
+
+    for token_name, regex in patterns.items():
+        if regex.match(lexeme):
+            # print("<{0}>".format(token_name), end=' ')
+            return token_name
+
+    # if no matches, it's not a valid lexeme. raise error
+    raise LexError
+
+
+if __name__ == "__main__":
+    parse(sys.argv[1])
+
+"""
+def is_match(token_name):
+    pass
 
 def getToken():
-    #regexps
+    #regexs
     #candidate string, switch w/ lexeme types. pass lexeme type?
-
-    #list, precompiled regexes. get string token from shlex then pass it thru, returnign lex error if necessary else returning an ecncoding of a token type
+    #list, precompiled regexes. get string token from shlex then pass it thru, returnign lex error if necessary else returning an ecncoding of a token types
+    pass
 
 def start():
-    """
+    ""
+    lexical types:
+    integers, type identifiers, object identifiers, special notation, strings, keywords, white space.
+    integers = [0-9]+
+    type identifiers = [A-Z][A-Za-z0-9_] | SELF_TYPE
+    object identifiers = [a-z][A-Za-z0-9_] | self 
+    special identifiers = self | SELF_TYPE  ->CANT USE SPECIAL IDS IN SOME CONSTRUCTS E,G, CASE OR LET
     Name -> [A-Z][A-Za-z0-9] 
+
+    keywords: class, else, false, fi, if, in, inherits, isvoid, let, loop, pool, then, while, case, esac, new, of, not, true
+        "class", "else", "false", "fi", "if", "in", "inherits", "isvoid", "let", "loop", "pool", "then", "while", "case", "esac",  "new", "of", "not", "true"
+
     ----
 
     Grammar:
@@ -42,12 +153,12 @@ def start():
     FEATURE_LIST_PRIME -> 
     FEATURE-> ATTRIBUTE | METHOD
     ATTRIBUTE -> Id ':' Type ';'
-    METHOD ->  Id '(' ARGSLIST ')' 
+    METHOD ->  Id '(' ARGSLIST ')' ':' Type {' METHOD_BODY '}'
     ARGSLIST -> ARG ARGSLIST | eps
     ARG -> Id ':' Type
+    METHOD_BODY -> STATEMENT METHOD_BODY | eps
 
-    """
 
-if __name__ == "__main__":
-    import sys
-    parse(sys.argv[1])
+    ""
+    pass
+"""
