@@ -25,3 +25,16 @@ difficulty
 		the way shlex handles strings. doesn't recognise quotes when it's part of a word. e.g. won't discern word"string"word. usually strings are in between punctuation, but if it encounters 
 		
 		drawback - doesn't preserve whitespace in strings.but since only concerned with syntax in this assignment, considered a necessary
+
+parsing
+    needed to convert the grammar first to not use the regexp shortened form in the manual figure
+
+    then eliminated left recursion
+        eliminated direct left recursion. thought through the grammar and determined that there is no indirect left recursion (by dfs). thus decided
+        not to do the algorithm for eliminating indirect left recursion since my grammar was already fairly large and e.g. eliminating epsilon rules greatly
+        increases grammar size.
+
+
+testing
+    individually tested lexing w/ the different example cool files to make sure the output was sensible.
+
