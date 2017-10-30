@@ -101,7 +101,7 @@ def lex(lexer):
             lexeme += lexer.get_token()
 
         # print("<{0}>".format(lexeme), end=', ')
-        if lexeme == lexer.eof:
+        if lexeme == "eof":
             break
         match_pattern(lexeme, lexer)
 
@@ -114,8 +114,8 @@ def next_word(lexer):
     # if there is an unmatched quote, append shlex tokens until the lexeme has a matched quote
     while lexeme.count('"') == 1:
         lexeme += lexer.get_token()
-    if lexeme == lexer.eof:
-        return None
+    if lexeme == "eof":
+        return "eof" 
     return match_pattern(lexeme, lexer)
 
 
@@ -155,10 +155,12 @@ def program(lexer):
     word = next_word(lexer)
 
     if _class(lexer):
-        if program(lexer):
-            return True
-        elif word == lexer.eof:
-            return True
+        if word == ";":
+            word = next_word(lexer)
+            if word == "eof":
+                return True
+            elif program(lexer):
+                return True
     else:
         return False
 
@@ -172,7 +174,8 @@ def _class(lexer):
         if word == "type_id":
             word = next_word(lexer)
 
-            if class_inheritance(lexer):
+            #if begins w/ inherits. else if begins w/ {
+            if class_type(lexer):
 
                 if word == "{":
                     word = next_word(lexer)
@@ -188,7 +191,7 @@ def _class(lexer):
     return False
 
 
-def class_inheritance(lexer):
+def class_type(lexer):
     global word
 
     if word == "inherits":
@@ -197,6 +200,7 @@ def class_inheritance(lexer):
         if word == "type_id" or word == "self_type":
             word = next_word(lexer)
             return True
+    return False
 
 
 def feature_list(lexer):
@@ -208,7 +212,7 @@ def feature_list(lexer):
 
             if feature_list(lexer):
                 return True
-            elif word == lexer.eof:
+            elif word == "eof":
                 return True
     return False
 
@@ -257,7 +261,7 @@ def feature_assignment(lexer):
 def formal_list(lexer):
     global word
     if formal(lexer):
-        if word == lexer.eof:
+        if word == "eof":
             return True
         elif formal_list(lexer):
             return True
@@ -289,8 +293,8 @@ if __name__ == "__main__":
 
 """
     Naive Grammar:
-    PROGRAM -> CLASS ; PROGRAM                                                           ||
-            | CLASS ;
+    PROGRAM -> CLASS ; PROGRAM                              || FIRST = class, FOLLOW = eof
+            | CLASS ;                                       || FIRST = class
     
     CLASS -> class type_id CLASS_TYPE { FEATURE_LIST } ;
     
@@ -375,19 +379,19 @@ if __name__ == "__main__":
                 | eps
     
     EXPR_LIST -> EXPR ; EXPR_LIST 
-                | EXPR ;
+                | EXPR ;    
     
-    LET_ARGS ->  LET_ARG LET_ARGS'
+    LET_ARGS ->  LET_ARG LET_ARGS'                      $$ FIRST = object_id
     
     LET_ARGS' -> , LET_ARG LET_ARGS' 
-                | eps
+                | eps                                   $$ FIRST = eps, object_id
                 
-    LET_ARG -> object_id : type_id OPT_EXPR_ASSIGNMENT
+    LET_ARG -> object_id : type_id OPT_EXPR_ASSIGNMENT  $$ FIRST = object_id
     
-    CASE_ARGS -> CASE_ARG CASE_ARGS 
-                | CASE_ARG 
+    CASE_ARGS -> CASE_ARG CASE_ARGS                  $$ FIRST = object_id
+                | CASE_ARG                           $$ FIRST = object_id
                 
-    CASE_ARG -> object_id : type_id => EXPR ; 
+    CASE_ARG -> object_id : type_id => EXPR ;        $$ FIRST = object_id
     
     
     ===========
