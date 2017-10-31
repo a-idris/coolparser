@@ -39,13 +39,6 @@ def initialise_patterns():
     regex = re.compile(r"[0-9]+")
     token_patterns["integer"] = regex
 
-    # special notation: self and SELF_TYPE
-    regex = re.compile(r"self")
-    token_patterns["self"] = regex
-
-    regex = re.compile(r"SELF_TYPE")
-    token_patterns["self_type"] = regex
-
     # type identifier
     regex = re.compile(r"[A-Z][A-Za-z0-9_]*")
     token_patterns["type_id"] = regex
@@ -53,6 +46,13 @@ def initialise_patterns():
     # object identifier
     regex = re.compile(r"[a-z][A-Za-z0-9_]*")
     token_patterns["object_id"] = regex
+
+    # special notation: self and SELF_TYPE
+    regex = re.compile(r"self")
+    token_patterns["self"] = regex
+
+    regex = re.compile(r"SELF_TYPE")
+    token_patterns["self_type"] = regex
 
     # strings
     regex = re.compile(r'"(.*?)"', re.VERBOSE)
@@ -132,5 +132,6 @@ def match_pattern(lexeme, lexer):
     if len(matched_str) != len(lexeme):
         rest = lexeme[len(matched_str):]
         lexer.push_token(rest)
+    t = Token(token_name, matched_str)
     return Token(token_name, matched_str)
     # return Token(name=token_name, val=matched_str)

@@ -2,6 +2,10 @@ import sys
 import shlex
 import cool_lexer
 from cool_lexer import next_token
+from cool_lexer import Token
+
+
+token = Token('', '')
 
 
 def parse(filename):
@@ -12,18 +16,17 @@ def parse(filename):
         lexer.whitespace_split = True
         lexer.quotes = ''  # disable shlex quote behaviour
 
+        global token
+        token = next_token(lexer)
+
         if program(lexer):
             print("No errors found")
         else:
             print("Errors found")
 
 
-token = None
-
-
 def program(lexer):
     global token
-    token = next_token(lexer)
     if _class(lexer):
         if token.name == ";":
             token = next_token(lexer)
@@ -60,6 +63,7 @@ def _class(lexer):
 
 def class_type(lexer):
     global token
+    print(token)
     if token.name == "inherits":
         token = next_token(lexer)
         if token.name == "type_id":
@@ -74,7 +78,7 @@ def feature_list(lexer):
     global token
     if token.name == "object_id":
         if feature(lexer):
-            if token == ";":
+            if token.name == ";":
                 token = next_token(lexer)
                 return feature_list(lexer)
     elif token.name == "}":
@@ -94,17 +98,17 @@ def feature_rest(lexer):
     global token
     if token.name == "(":
         token = next_token(lexer)
-        if opt_feature_args():
+        if opt_feature_args(lexer):
             if token.name == ")":
                 token = next_token(lexer)
                 if token.name == ":":
                     token = next_token(lexer)
                     if token.name == "type_id":
                         token = next_token(lexer)
-                        if token == "{":
+                        if token.name == "{":
                             token = next_token(lexer)
                             if expr(lexer):
-                                if token == "}":
+                                if token.name == "}":
                                     token = next_token(lexer)
                                     return True
     elif token.name == ":":
@@ -118,7 +122,7 @@ def feature_rest(lexer):
 def opt_feature_args(lexer):
     global token
     if token.name == "object_id":
-        return feature_args()
+        return feature_args(lexer)
     elif token.name == ")":
         return True
     return False
@@ -161,11 +165,11 @@ def expr_assignment(lexer):
 
 def formal(lexer):
     global token
-    if token == "object_id":
+    if token.name == "object_id":
         token = next_token(lexer)
-        if token == ":":
+        if token.name == ":":
             token = next_token(lexer)
-            if token == "type_id":
+            if token.name == "type_id":
                 token = next_token(lexer)
                 return True
     return False
@@ -210,7 +214,7 @@ def expr(lexer):
         if let_args(lexer):
             if token.name == "in":
                 token = next_token(lexer)
-                return expr()
+                return expr(lexer)
     elif token.name == "case":
         token = next_token(lexer)
         if expr(lexer):
@@ -243,13 +247,13 @@ def object_id_op(lexer):
     global token
     if token.name == "(":
         token = next_token(lexer)
-        if opt_expr_args():
+        if opt_expr_args(lexer):
             if token.name == ")":
                 token = next_token(lexer)
                 return True
     elif token.name == "<-":
         token = next_token(lexer)
-        return assignment_expr(lexer)
+        return expr(lexer)
     elif token.name in ['}', ';', 'in', ')', 'then', 'else', 'fi', 'loop', 'pool', 'of', ',']:
         return True
     return False
@@ -268,7 +272,7 @@ def assignment_expr(lexer):
 def boolean_complement_expr(lexer):
     global token
     if comparison_expr(lexer):
-        return comparison_op(lexer)            
+        return comparison_op(lexer)
 
 
 def comparison_op(lexer):
@@ -278,11 +282,11 @@ def comparison_op(lexer):
         if comparison_expr(lexer):
             return comparison_op(lexer)
     elif token.name == "<":
-        token == next_token(lexer)
+        token = next_token(lexer)
         if comparison_expr(lexer):
             return comparison_op(lexer)
     elif token.name == "=":
-        token == next_token(lexer)
+        token = next_token(lexer)
         if comparison_expr(lexer):
             return comparison_op(lexer)
     elif token.name in ['}', ';', 'in', ')', 'then', 'else', 'fi', 'loop', 'pool', 'of', ',']:
@@ -303,7 +307,7 @@ def add_op(lexer):
         if add_expr(lexer):
             return add_op(lexer)
     elif token.name == "-":
-        token == next_token(lexer)
+        token = next_token(lexer)
         if add_expr(lexer):
             return add_op(lexer)
     elif token.name in ['<=', '<', '=', '}', ';', 'in', ')', 'then', 'else', 'fi', 'loop', 'pool', 'of', ',']:
@@ -324,7 +328,7 @@ def mult_op(lexer):
         if mult_expr(lexer):
             return mult_op(lexer)
     elif token.name == "/":
-        token == next_token(lexer)
+        token = next_token(lexer)
         if mult_expr(lexer):
             return mult_op(lexer)
     elif token.name in ['+', '-', '<=', '<', '=', '}', ';', 'in', ')', 'then', 'else', 'fi', 'loop', 'pool', 'of', ',']:
@@ -353,9 +357,9 @@ def checkvoid_expr(lexer):
 
 
 def integer_complement_expr(lexer):
-    global token 
+    global token
     if dispatch_type_expr(lexer):
-        return dispatch_type_op()
+        return dispatch_type_op(lexer)
     return False
 
 
@@ -409,7 +413,7 @@ def dispatch_expr(lexer):
 
 
 def constant(lexer):
-    global token 
+    global token
     if token.name == "integer":
         token = next_token(lexer)
         return True
@@ -438,11 +442,11 @@ def expr_args(lexer):
     global token
     if expr(lexer):
         return more_expr_args(lexer)
-    return False    
+    return False
 
 
 def more_expr_args(lexer):
-    global token 
+    global token
     if token.name == ",":
         token = next_token(lexer)
         if expr(lexer):
@@ -471,14 +475,14 @@ def more_exprs(lexer):
 
 
 def let_args(lexer):
-    global token 
+    global token
     if let_arg(lexer):
         return more_let_args(lexer)
     return False
 
 
 def more_let_args(lexer):
-    global token 
+    global token
     if token.name == ",":
         token = next_token(lexer)
         if let_arg(lexer):
@@ -489,7 +493,7 @@ def more_let_args(lexer):
 
 
 def let_arg(lexer):
-    global token 
+    global token
     if token.name == "object_id":
         token = next_token(lexer)
         if token.name == ":":
@@ -501,7 +505,7 @@ def let_arg(lexer):
 
 
 def case_args(lexer):
-    global token 
+    global token
     if case_arg(lexer):
         return more_case_args(lexer)
     return False
@@ -530,7 +534,7 @@ def case_arg(lexer):
                         if token.name == ";":
                             token = next_token(lexer)
                             return True
-    return False 
+    return False
 
 
 if __name__ == "__main__":
