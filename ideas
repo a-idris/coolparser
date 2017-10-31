@@ -38,3 +38,7 @@ parsing
 testing
     individually tested lexing w/ the different example cool files to make sure the output was sensible.
 
+trouble adding precedence. at first i moved the expr expansions not mentioned in the precedence diagram to the lowest precedence level
+but this lead to a FIRST+ conflict, because at the highest precedence level I expanded to object_id, and had expansions starting w/ object_id
+at the lowest level. But moving to the lowest precedence level solved it.
+
