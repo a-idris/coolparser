@@ -1,0 +1,205 @@
+before subbing follow()
+    *** FIRST: class
+    *** FOLLOW: eof | FOLLOW(PROGRAM_REST)
+    PROGRAM -> CLASS ; PROGRAM_REST                 $$ FIRST = class
+    
+    *** FIRST: class | eps
+    *** FOLLOW: FOLLOW(PROGRAM) = eof 
+    PROGRAM_REST -> PROGRAM                         $$ FIRST = class
+                |   eps                             $$ FIRST = eps
+    
+    *** FIRST: class
+    *** FOLLOW: ;
+    CLASS -> class type_id CLASS_TYPE { FEATURE_LIST }        $$ FIRST = class
+    
+    *** FIRST: inherits | eps
+    *** FOLLOW: {
+    CLASS_TYPE -> inherits type_id                  $$ FIRST = inherits
+            | eps                                   $$ FIRST = eps
+    
+    *** FIRST: object_id | eps
+    *** FOLLOW: }
+    FEATURE_LIST -> FEATURE ; FEATURE_LIST                  $$ FIRST = object_id
+                | eps                                       $$ FIRST = eps
+    
+    *** FIRST: object_id
+    *** FOLLOW: ; 
+    FEATURE -> object_id FEATURE_REST               $$ FIRST = object_id
+    
+    *** FIRST: ( | :
+    *** FOLLOW: ;
+    FEATURE_REST -> ( OPT_FEATURE_ARGS ) : type { EXPR }    $$ FIRST = (
+                |   : type OPT_EXPR_ASSIGNMENT              $$ FIRST = :
+    
+    *** FIRST: object_id | eps
+    *** FOLLOW: )
+    OPT_FEATURE_ARGS -> FEATURE_ARGS                $$ FIRST = object_id
+                    | eps                           $$ FIRST = eps
+    
+    *** FIRST: object_id
+    *** FOLLOW: )
+    FEATURE_ARGS -> FORMAL MORE_FEATURE_ARGS                  $$ FIRST = object_id
+    
+    *** FIRST: , | eps
+    *** FOLLOW: )
+    MORE_FEATURE_ARGS -> , FORMAL MORE_FEATURE_ARGS         $$ FIRST = ,
+                     | eps                                  $$ FIRST = eps
+    
+    *** FIRST: <- | eps
+    *** FOLLOW: ; | FOLLOW(LET_ARG)
+    OPT_EXPR_ASSIGNMENT -> EXPR_ASSIGNMENT          $$ FIRST = <-
+                        | eps                       $$ FIRST = eps
+    
+    *** FIRST: <-
+    *** FOLLOW: ; | FOLLOW(LET_ARG)
+    EXPR_ASSIGNMENT -> <- EXPR                      $$ FIRST = <-
+    
+    *** FIRST: object_id
+    *** FOLLOW: , | )
+    FORMAL -> object_id : type_id                   $$ FIRST = object_id
+        
+    *** FIRST: object_id | integer | string | true | false | (  | if | while | { | let | case | new | ~ | isvoid | not
+    *** FOLLOW: } | ; | FOLLOW(LET_ARG) | ) | then | else | fi | loop | pool | FOLLOW(DISPATCH_EXPR) | of | , | FOLLOW(EXPR_ARGS) | FOLLOW(MORE_EXPR_ARGS) 
+    EXPR -> ID OBJECT_ID_OP                                     $$ FIRST = object_id
+        |   ASSIGNMENT_EXPR                                     $$ FIRST = integer | string | true | false | (  | if | while | { | let | case | new | ~ | isvoid | not
+
+    *** FIRST: object_id 
+    *** FOLLOW: ( | <- | } | ; | FOLLOW(LET_ARG) | ) | then | else | fi | loop | pool | FOLLOW(DISPATCH_EXPR) | of | , | FOLLOW(EXPR_ARGS) | FOLLOW(MORE_EXPR_ARGS) 
+    ID -> object_id                                     $$ FIRST = object_id
+
+    *** FIRST: ( | <- | eps
+    *** FOLLOW: } | ; | FOLLOW(LET_ARG) | ) | then | else | fi | loop | pool | FOLLOW(DISPATCH_EXPR) | of | , | FOLLOW(EXPR_ARGS) | FOLLOW(MORE_EXPR_ARGS)
+    OBJECT_ID_OP -> ( OPT_EXPR_ARGS )                               $$ FIRST = (
+                |   <- ASSIGNMENT_EXPR                          $$ FIRST = <-
+                |   eps                                         $$ FIRST = eps
+            
+    *** FIRST: integer | string | true | false | (  | if | while | { | let | case | new | ~ | isvoid | not 
+    *** FOLLOW: } | ; | FOLLOW(LET_ARG) | ) | then | else | fi | loop | pool | FOLLOW(DISPATCH_EXPR) | of | , | FOLLOW(EXPR_ARGS) | FOLLOW(MORE_EXPR_ARGS)
+    ASSIGNMENT_EXPR -> not BOOLEAN_COMPLEMENT_EXPR              $$ FIRST = not
+                    | BOOLEAN_COMPLEMENT_EXPR                   $$ FIRST = integer | string | true | false | (  | if | while | { | let | case | new | ~ | isvoid 
+
+    *** FIRST: integer | string | true | false | (  | if | while | { | let | case | new | ~ | isvoid 
+    *** FOLLOW: } | ; | FOLLOW(LET_ARG) | ) | then | else | fi | loop | pool | FOLLOW(DISPATCH_EXPR) | of | , | FOLLOW(EXPR_ARGS) | FOLLOW(MORE_EXPR_ARGS)
+    BOOLEAN_COMPLEMENT_EXPR -> COMPARISON_EXPR COMPARISON_OP    $$ FIRST = integer | string | true | false | (  | if | while | { | let | case | new | ~ | isvoid 
+    
+    *** FIRST: <= | < | = | eps
+    *** FOLLOW: } | ; | FOLLOW(LET_ARG) | ) | then | else | fi | loop | pool | FOLLOW(DISPATCH_EXPR) | of | , | FOLLOW(EXPR_ARGS) | FOLLOW(MORE_EXPR_ARGS)
+    COMPARISON_OP -> <= COMPARISON_EXPR COMPARISON_OP           $$ FIRST = <=
+                  |  < COMPARISON_EXPR COMPARISON_OP            $$ FIRST = < 
+                  |  = COMPARISON_EXPR COMPARISON_OP            $$ FIRST = =
+                  |  eps                                        $$ FIRST = eps
+                    
+    *** FIRST: integer | string | true | false | (  | if | while | { | let | case | new | ~ | isvoid 
+    *** FOLLOW: <= | < | = | } | ; | FOLLOW(LET_ARG) | ) | then | else | fi | loop | pool | FOLLOW(DISPATCH_EXPR) | of | , | FOLLOW(EXPR_ARGS) | FOLLOW(MORE_EXPR_ARGS)
+    COMPARISON_EXPR -> ADD_EXPR ADD_OP              $$ FIRST = integer | string | true | false | (  | if | while | { | let | case | new | ~ | isvoid 
+    
+    *** FIRST: + | - | eps
+    *** FOLLOW: <= | < | = | } | ; | FOLLOW(LET_ARG) | ) | then | else | fi | loop | pool | FOLLOW(DISPATCH_EXPR) | of | , | FOLLOW(EXPR_ARGS) | FOLLOW(MORE_EXPR_ARGS)
+    ADD_OP -> + ADD_EXPR ADD_OP                     $$ FIRST = +
+             |  - ADD_EXPR ADD_OP                   $$ FIRST = - 
+             |  eps                                 $$ FIRST = eps
+                
+    *** FIRST: integer | string | true | false | (  | if | while | { | let | case | new | ~ | isvoid 
+    *** FOLLOW: + | - | <= | < | = | } | ; | FOLLOW(LET_ARG) | ) | then | else | fi | loop | pool | FOLLOW(DISPATCH_EXPR) | of | , | FOLLOW(EXPR_ARGS) | FOLLOW(MORE_EXPR_ARGS) 
+    ADD_EXPR -> MULT_EXPR MULT_OP                   $$ FIRST = integer | string | true | false | (  | if | while | { | let | case | new | ~ | isvoid 
+    
+    *** FIRST: * | / | eps
+    *** FOLLOW: + | - | <= | < | = | } | ; | FOLLOW(LET_ARG) | ) | then | else | fi | loop | pool | FOLLOW(DISPATCH_EXPR) | of | , | FOLLOW(EXPR_ARGS) | FOLLOW(MORE_EXPR_ARGS) 
+    MULT_OP -> * MULT_EXPR MULT_OP                      $$ FIRST = *
+             | / MULT_EXPR MULT_OP                      $$ FIRST = / 
+             | eps                                      $$ FIRST = eps
+
+    *** FIRST: integer | string | true | false | (  | if | while | { | let | case | new | ~ | isvoid 
+    *** FOLLOW: * | / | + | - | <= | < | = | } | ; | FOLLOW(LET_ARG) | ) | then | else | fi | loop | pool | FOLLOW(DISPATCH_EXPR) | of | , | FOLLOW(EXPR_ARGS) | FOLLOW(MORE_EXPR_ARGS) 
+    MULT_EXPR -> isvoid CHECKVOID_EXPR                  $$ FIRST = isvoid
+                | CHECKVOID_EXPR                        $$ FIRST = integer | string | true | false | (  | if | while | { | let | case | new | ~
+    
+    *** FIRST: integer | string | true | false | (  | if | while | { | let | case | new | ~
+    *** FOLLOW: * | / | + | - | <= | < | = | } | ; | FOLLOW(LET_ARG) | ) | then | else | fi | loop | pool | FOLLOW(DISPATCH_EXPR) | of | , | FOLLOW(EXPR_ARGS) | FOLLOW(MORE_EXPR_ARGS) 
+    CHECKVOID_EXPR -> ~ INTEGER_COMPLEMENT_EXPR               $$ FIRST = ~
+                    | INTEGER_COMPLEMENT_EXPR                 $$ FIRST =  integer | string | true | false | (  | if | while | { | let | case | new
+    
+    *** FIRST:  integer | string | true | false | (  | if | while | { | let | case | new
+    *** FOLLOW: * | / | + | - | <= | < | = | } | ; | FOLLOW(LET_ARG) | ) | then | else | fi | loop | pool | FOLLOW(DISPATCH_EXPR) | of | , | FOLLOW(EXPR_ARGS) | FOLLOW(MORE_EXPR_ARGS
+    INTEGER_COMPLEMENT_EXPR -> DISPATCH_TYPE_EXPR DISPATCH_TYPE_OP       $$ FIRST =  integer | string | true | false | (  | if | while | { | let | case | new
+    
+    *** FIRST: @ | eps
+    *** FOLLOW: * | / | + | - | <= | < | = | } | ; | FOLLOW(LET_ARG) | ) | then | else | fi | loop | pool | FOLLOW(DISPATCH_EXPR) | of | , | FOLLOW(EXPR_ARGS) | FOLLOW(MORE_EXPR_ARGS
+    DISPATCH_TYPE_OP -> @ type_id                       $$ FIRST = @
+                      | eps                             $$ FIRST = eps
+                    
+    *** FIRST: integer | string | true | false | (  | if | while | { | let | case | new     
+    *** FOLLOW: @ | * | / | + | - | <= | < | = | } | ; | FOLLOW(LET_ARG) | ) | then | else | fi | loop | pool | FOLLOW(DISPATCH_EXPR) | of | , | FOLLOW(EXPR_ARGS) | FOLLOW(MORE_EXPR_ARGS
+    DISPATCH_TYPE_EXPR -> DISPATCH_EXPR DISPATCH_OP     $$ FIRST = integer | string | true | false | (  | if | while | { | let | case | new
+    
+    *** FIRST: eps | .
+    *** FOLLOW: @ | * | / | + | - | <= | < | = | } | ; | FOLLOW(LET_ARG) | ) | then | else | fi | loop | pool | FOLLOW(DISPATCH_EXPR) | of | , | FOLLOW(EXPR_ARGS) | FOLLOW(MORE_EXPR_ARGS
+    DISPATCH_OP -> . object_id ( OPT_EXPR_ARGS )            $$ FIRST = .
+                | eps                                   $$ FIRST = eps
+    
+    *** FIRST: integer | string | true | false | (  | if | while | { | let | case | new
+    *** FOLLOW: . | @ | * | / | + | - | <= | < | = | } | ; | FOLLOW(LET_ARG) | ) | then | else | fi | loop | pool | FOLLOW(DISPATCH_EXPR) | of | , | FOLLOW(EXPR_ARGS) | FOLLOW(MORE_EXPR_ARGS
+    DISPATCH_EXPR -> CONSTANT                               $$ FIRST = integer | string | true | false
+                    | ( EXPR )                              $$ FIRST = (
+                    | if EXPR then EXPR else EXPR fi        $$ FIRST = if
+                    | while EXPR loop EXPR pool             $$ FIRST = while
+                    | { EXPR_LIST }                         $$ FIRST = {
+                    | let LET_ARGS in EXPR                  $$ FIRST = let
+                    | case EXPR of CASE_ARGS esac           $$ FIRST = case
+                    | new type_id                           $$ FIRST = new
+    
+    *** FIRST: integer | string | true | false
+    *** FOLLOW: . | @ | * | / | + | - | <= | < | = | } | ; | FOLLOW(LET_ARG) | ) | then | else | fi | loop | pool | FOLLOW(DISPATCH_EXPR) | of | , | FOLLOW(EXPR_ARGS) | FOLLOW(MORE_EXPR_ARGS
+    CONSTANT -> integer                                 $$ FIRST = integer
+            | string                                    $$ FIRST = string
+            | true                                      $$ FIRST = true
+            | false                                     $$ FIRST = false
+    
+    *** FIRST: object_id | integer | string | true | false | (  | if | while | { | let | case | new | ~ | isvoid | not | eps
+    *** FOLLOW: )
+    OPT_EXPR_ARGS -> EXPR_ARGS                             $$ FIRST = object_id | integer | string | true | false | (  | if | while | { | let | case | new | ~ | isvoid | not
+            | eps                                       $$ FIRST = eps
+    
+    *** FIRST: object_id | integer | string | true | false | (  | if | while | { | let | case | new | ~ | isvoid | not
+    *** FOLLOW: )
+    EXPR_ARGS -> EXPR MORE_EXPR_ARGS                      $$ FIRST = object_id | integer | string | true | false | (  | if | while | { | let | case | new | ~ | isvoid | not
+    
+    *** FIRST: , | eps
+    *** FOLLOW: )
+    MORE_EXPR_ARGS -> , EXPR MORE_EXPR_ARGS                   $$ FIRST = ,
+                | eps                                   $$ FIRST = eps
+    
+    *** FIRST: object_id | integer | string | true | false | (  | if | while | { | let | case | new | ~ | isvoid | not
+    *** FOLLOW: } | FOLLOW(MORE_EXPRS)  
+    EXPR_LIST -> EXPR ; MORE_EXPRs                      $$ FIRST = object_id | integer | string | true | false | (  | if | while | { | let | case | new | ~ | isvoid | not
+    
+    *** FIRST: object_id | integer | string | true | false | (  | if | while | { | let | case | new | ~ | isvoid | not | eps
+    *** FOLLOW: FOLLOW(EXPR_LIST) = }
+    MORE_EXPRS -> EXPR_LIST                             $$ FIRST = object_id | integer | string | true | false | (  | if | while | { | let | case | new | ~ | isvoid | not
+                | eps                                   $$ FIRST = eps
+    
+    *** FIRST: object_id
+    *** FOLLOW: in
+    LET_ARGS ->  LET_ARG MORE_LET_ARGS                       $$ FIRST = object_id
+    
+    *** FIRST: , | eps
+    *** FOLLOW: in
+    MORE_LET_ARGS -> , LET_ARG MORE_LET_ARGS                    $$ FIRST = ,
+                | eps                                   $$ FIRST = eps
+    
+    *** FIRST: object_id            
+    *** FOLLOW: , | in
+    LET_ARG -> object_id : type_id OPT_EXPR_ASSIGNMENT   $$ FIRST = object_id    
+    
+    *** FIRST: object_id
+    *** FOLLOW: esac | FOLLOW(MORE_CASE_ARGS)
+    CASE_ARGS -> CASE_ARG MORE_CASE_ARGS            $$ FIRST = object_id
+    
+    *** FIRST: object_id | eps
+    *** FOLLOW: FOLLOW(CASE_ARGS) = esac
+    MORE_CASE_ARGS -> CASE_ARGS                 $$ FIRST = object_id
+                    | eps                       $$ FIRST = eps
+    
+    *** FIRST: object_id 
+    *** FOLLOW: object_id | esac | FOLLOW(MORE_CASE_ARGS)
+    CASE_ARG -> object_id : type_id => EXPR ;        $$ FIRST = object_id
