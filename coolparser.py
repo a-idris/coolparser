@@ -2,6 +2,7 @@ import sys
 import shlex
 import cool_lexer
 from cool_lexer import next_token
+from cool_lexer import peek_token
 from cool_lexer import Token
 
 
@@ -25,14 +26,24 @@ def parse(filename):
             print("Errors found")
 
 
+def fail(name, lexer):
+    print("Parse error in {0} on line {1}".format(name, lexer.lineno))
+
+
+# lineno, column, tokens expected
+
+
 def program(lexer):
     global token
+    # for single first plus rules also need to do: if token.name == class. FOR ERR HANDLING
     if _class(lexer):
         if token.name == ";":
             token = next_token(lexer)
             if program_rest(lexer):
                 return True
-    return False
+            else:
+                fail("program", lexer)
+    raise Exception
 
 
 def program_rest(lexer):
@@ -41,7 +52,9 @@ def program_rest(lexer):
         return program(lexer)
     elif token.name == "eof":
         return True
-    return False
+    else:
+        fail("program_rest", lexer)
+    raise Exception
 
 
 def _class(lexer):
@@ -50,7 +63,6 @@ def _class(lexer):
         token = next_token(lexer)
         if token.name == "type_id":
             token = next_token(lexer)
-            # if begins w/ inherits. else if begins w/ {
             if class_type(lexer):
                 if token.name == "{":
                     token = next_token(lexer)
@@ -58,12 +70,13 @@ def _class(lexer):
                         if token.name == "}":
                             token = next_token(lexer)
                             return True
-    return False
+                        else:
+                            fail("class", lexer)
+    raise Exception
 
 
 def class_type(lexer):
     global token
-    print(token)
     if token.name == "inherits":
         token = next_token(lexer)
         if token.name == "type_id":
@@ -71,7 +84,7 @@ def class_type(lexer):
             return True
     elif token.name == "{":
         return True
-    return False
+    raise Exception
 
 
 def feature_list(lexer):
@@ -83,7 +96,7 @@ def feature_list(lexer):
                 return feature_list(lexer)
     elif token.name == "}":
         return True
-    return False
+    raise Exception
 
 
 def feature(lexer):
@@ -91,7 +104,7 @@ def feature(lexer):
     if token.name == "object_id":
         token = next_token(lexer)
         return feature_rest(lexer)
-    return False
+    raise Exception
 
 
 def feature_rest(lexer):
@@ -116,7 +129,7 @@ def feature_rest(lexer):
         if token.name == "type_id":
             token = next_token(lexer)
             return opt_expr_assignment(lexer)
-    return False
+    raise Exception
 
 
 def opt_feature_args(lexer):
@@ -125,14 +138,14 @@ def opt_feature_args(lexer):
         return feature_args(lexer)
     elif token.name == ")":
         return True
-    return False
+    raise Exception
 
 
 def feature_args(lexer):
     global token
     if formal(lexer):
         return more_feature_args(lexer)
-    return False
+    raise Exception
 
 
 def more_feature_args(lexer):
@@ -143,7 +156,7 @@ def more_feature_args(lexer):
             return more_feature_args(lexer)
     elif token.name == ")":
         return True
-    return False
+    raise Exception
 
 
 def opt_expr_assignment(lexer):
@@ -152,7 +165,7 @@ def opt_expr_assignment(lexer):
         return expr_assignment(lexer)
     elif token.name == ";" or token.name == "," or token.name == "in":
         return True
-    return False
+    raise Exception
 
 
 def expr_assignment(lexer):
@@ -160,7 +173,7 @@ def expr_assignment(lexer):
     if token.name == "<-":
         token = next_token(lexer)
         return expr(lexer)
-    return False
+    raise Exception
 
 
 def formal(lexer):
@@ -172,16 +185,24 @@ def formal(lexer):
             if token.name == "type_id":
                 token = next_token(lexer)
                 return True
-    return False
+    raise Exception
 
 
 def expr(lexer):
     global token
     if token.name == "object_id":
-        if _id(lexer):
-            return object_id_op(lexer)
+        # there is FIRST+ conflict for token object_id.
+        # peek_token preserves the token so that the next call to next_token will return the same token
+        peek = peek_token(lexer)
+        if peek.name == '<-':
+            if _id(lexer):
+                if token.name == "<-":
+                    token = next_token(lexer)
+                    return boolean_complement_expr(lexer)
+        else:
+            return boolean_complement_expr(lexer)
     elif token.name in ["integer", "string", "true", "false", "(", "~", "isvoid", "not"]:
-        return assignment_expr(lexer)
+        return boolean_complement_expr(lexer)
     elif token.name == "if":
         token = next_token(lexer)
         if expr(lexer):
@@ -229,49 +250,22 @@ def expr(lexer):
         if token.name == "type_id":
             token = next_token(lexer)
             return True
-    return False
-
-
-def _id(lexer):
-    global token
-    if token.name == "object_id":
-        token = next_token(lexer)
-        return True
-    return False
-
-
-# lineno, column, tokens expected
-
-
-def object_id_op(lexer):
-    global token
-    if token.name == "(":
-        token = next_token(lexer)
-        if opt_expr_args(lexer):
-            if token.name == ")":
-                token = next_token(lexer)
-                return True
-    elif token.name == "<-":
-        token = next_token(lexer)
-        return expr(lexer)
-    elif token.name in ['}', ';', 'in', ')', 'then', 'else', 'fi', 'loop', 'pool', 'of', ',']:
-        return True
-    return False
-
-
-def assignment_expr(lexer):
-    global token
-    if token.name == "not":
-        token = next_token(lexer)
-        return boolean_complement_expr(lexer)
-    elif token.name in ['integer', 'string', 'true', 'false', '(', '~', 'isvoid']:
-        return boolean_complement_expr(lexer)
-    return False
+    raise Exception
 
 
 def boolean_complement_expr(lexer):
     global token
-    if comparison_expr(lexer):
+    if token.name == "not":
+        token = next_token(lexer)
+        return comparison_expr(lexer)
+    elif token.name in ['integer', 'string', 'true', 'false', '(', 'object_id', '~', 'isvoid']:
+        return comparison_expr(lexer)
+    raise Exception
+
+
+def comparison_expr(lexer):
+    global token
+    if add_expr(lexer):
         return comparison_op(lexer)
 
 
@@ -279,24 +273,24 @@ def comparison_op(lexer):
     global token
     if token.name == "<=":
         token = next_token(lexer)
-        if comparison_expr(lexer):
+        if add_expr(lexer):
             return comparison_op(lexer)
     elif token.name == "<":
         token = next_token(lexer)
-        if comparison_expr(lexer):
+        if add_expr(lexer):
             return comparison_op(lexer)
     elif token.name == "=":
         token = next_token(lexer)
-        if comparison_expr(lexer):
+        if add_expr(lexer):
             return comparison_op(lexer)
     elif token.name in ['}', ';', 'in', ')', 'then', 'else', 'fi', 'loop', 'pool', 'of', ',']:
         return True
-    return False
+    raise Exception
 
 
-def comparison_expr(lexer):
+def add_expr(lexer):
     global token
-    if add_expr(lexer):
+    if mult_expr(lexer):
         return add_op(lexer)
 
 
@@ -304,20 +298,20 @@ def add_op(lexer):
     global token
     if token.name == "+":
         token = next_token(lexer)
-        if add_expr(lexer):
+        if mult_expr(lexer):
             return add_op(lexer)
     elif token.name == "-":
         token = next_token(lexer)
-        if add_expr(lexer):
+        if mult_expr(lexer):
             return add_op(lexer)
     elif token.name in ['<=', '<', '=', '}', ';', 'in', ')', 'then', 'else', 'fi', 'loop', 'pool', 'of', ',']:
         return True
-    return False
+    raise Exception
 
 
-def add_expr(lexer):
+def mult_expr(lexer):
     global token
-    if mult_expr(lexer):
+    if checkvoid_expr(lexer):
         return mult_op(lexer)
 
 
@@ -325,42 +319,42 @@ def mult_op(lexer):
     global token
     if token.name == "*":
         token = next_token(lexer)
-        if mult_expr(lexer):
+        if checkvoid_expr(lexer):
             return mult_op(lexer)
     elif token.name == "/":
         token = next_token(lexer)
-        if mult_expr(lexer):
+        if checkvoid_expr(lexer):
             return mult_op(lexer)
     elif token.name in ['+', '-', '<=', '<', '=', '}', ';', 'in', ')', 'then', 'else', 'fi', 'loop', 'pool', 'of', ',']:
         return True
-    return False
-
-
-def mult_expr(lexer):
-    global token
-    if token.name == "isvoid":
-        token = next_token(lexer)
-        return checkvoid_expr(lexer)
-    elif token.name in ['integer', 'string', 'true', 'false', '(', '~']:
-        return checkvoid_expr(lexer)
-    return False
+    raise Exception
 
 
 def checkvoid_expr(lexer):
     global token
-    if token.name == "~":
+    if token.name == "isvoid":
         token = next_token(lexer)
         return integer_complement_expr(lexer)
-    elif token.name in ['integer', 'string', 'true', 'false', '(']:
+    elif token.name in ['integer', 'string', 'true', 'false', '(', 'object_id', '~']:
         return integer_complement_expr(lexer)
-    return False
+    raise Exception
 
 
 def integer_complement_expr(lexer):
     global token
-    if dispatch_type_expr(lexer):
+    if token.name == "~":
+        token = next_token(lexer)
+        return dispatch_type_expr(lexer)
+    elif token.name in ['integer', 'string', 'true', 'false', '(', 'object_id']:
+        return dispatch_type_expr(lexer)
+    raise Exception
+
+
+def dispatch_type_expr(lexer):
+    global token
+    if dispatch_expr(lexer):
         return dispatch_type_op(lexer)
-    return False
+    raise Exception
 
 
 def dispatch_type_op(lexer):
@@ -372,14 +366,14 @@ def dispatch_type_op(lexer):
             return True
     elif token.name in ['*', '/', '+', '-', '<=', '<', '=', '}', ';', 'in', ')', 'then', 'else', 'fi', 'loop', 'pool', 'of', ',']:
         return True
-    return False
+    raise Exception
 
 
-def dispatch_type_expr(lexer):
+def dispatch_expr(lexer):
     global token
-    if dispatch_expr(lexer):
+    if element(lexer):
         return dispatch_op(lexer)
-    return False
+    raise Exception
 
 
 def dispatch_op(lexer):
@@ -396,10 +390,10 @@ def dispatch_op(lexer):
                         return True
     elif token.name in ['@', '*', '/', '+', '-', '<=', '<', '=', '}', ';', 'in', ')', 'then', 'else', 'fi', 'loop', 'pool', 'of', ',']:
         return True
-    return False
+    raise Exception
 
 
-def dispatch_expr(lexer):
+def element(lexer):
     global token
     if token.name in ['integer', 'string', 'true', 'false']:
         return constant(lexer)
@@ -409,7 +403,10 @@ def dispatch_expr(lexer):
             if token.name == ")":
                 token = next_token(lexer)
                 return True
-    return False
+    elif token.name == 'object_id':
+        if _id(lexer):
+            return id_op(lexer)
+    raise Exception
 
 
 def constant(lexer):
@@ -426,7 +423,28 @@ def constant(lexer):
     elif token.name == "false":
         token = next_token(lexer)
         return True
-    return False
+    raise Exception
+
+
+def _id(lexer):
+    global token
+    if token.name == "object_id":
+        token = next_token(lexer)
+        return True
+    raise Exception
+
+
+def id_op(lexer):
+    global token
+    if token.name == "(":
+        token = next_token(lexer)
+        if opt_expr_args(lexer):
+            if token.name == ")":
+                token = next_token(lexer)
+                return True
+    elif token.name in ['.', '@', '*', '/', '+', '-', '<=', '<', '=', '}', ';', 'in', ')', 'then', 'else', 'fi', 'loop','pool', 'of', ',']:
+        return True
+    raise Exception
 
 
 def opt_expr_args(lexer):
@@ -435,14 +453,14 @@ def opt_expr_args(lexer):
         return expr_args(lexer)
     elif token.name == ")":
         return True
-    return False
+    raise Exception
 
 
 def expr_args(lexer):
     global token
     if expr(lexer):
         return more_expr_args(lexer)
-    return False
+    raise Exception
 
 
 def more_expr_args(lexer):
@@ -451,9 +469,14 @@ def more_expr_args(lexer):
         token = next_token(lexer)
         if expr(lexer):
             return more_expr_args(lexer)
+        else:
+            fail("more_expr_args", lexer)
     elif token.name == ")":
         return True
-    return False
+    else:
+        fail("more_expr_args", lexer)
+        return False
+    raise Exception
 
 
 def expr_list(lexer):
@@ -462,7 +485,7 @@ def expr_list(lexer):
         if token.name ==";":
             token = next_token(lexer)
             return more_exprs(lexer)
-    return False
+    raise Exception
 
 
 def more_exprs(lexer):
@@ -471,14 +494,14 @@ def more_exprs(lexer):
         return expr_list(lexer)
     elif token.name == "}":
         return True
-    return False
+    raise Exception
 
 
 def let_args(lexer):
     global token
     if let_arg(lexer):
         return more_let_args(lexer)
-    return False
+    raise Exception
 
 
 def more_let_args(lexer):
@@ -489,7 +512,7 @@ def more_let_args(lexer):
             return more_let_args(lexer)
     elif token.name == "in":
         return True
-    return False
+    raise Exception
 
 
 def let_arg(lexer):
@@ -501,14 +524,14 @@ def let_arg(lexer):
             if token.name == "type_id":
                 token = next_token(lexer)
                 return opt_expr_assignment(lexer)
-    return False
+    raise Exception
 
 
 def case_args(lexer):
     global token
     if case_arg(lexer):
         return more_case_args(lexer)
-    return False
+    raise Exception
 
 
 def more_case_args(lexer):
@@ -517,7 +540,7 @@ def more_case_args(lexer):
         return case_args(lexer)
     elif token.name == "esac":
         return True
-    return False
+    raise Exception
 
 
 def case_arg(lexer):
@@ -534,216 +557,8 @@ def case_arg(lexer):
                         if token.name == ";":
                             token = next_token(lexer)
                             return True
-    return False
+    raise Exception
 
 
 if __name__ == "__main__":
     parse(sys.argv[1])
-
-""" 
-    *** FIRST: class
-    *** FOLLOW: eof | FOLLOW(PROGRAM_REST)
-    PROGRAM -> CLASS ; PROGRAM_REST                 $$ FIRST_PLUS = class
-    
-    *** FIRST: class | eps
-    *** FOLLOW: FOLLOW(PROGRAM) = eof 
-    PROGRAM_REST -> PROGRAM                         $$ FIRST_PLUS = class
-                |   eps                             $$ FIRST_PLUS = eof 
-    
-    *** FIRST: class
-    *** FOLLOW: ;
-    CLASS -> class type_id CLASS_TYPE { FEATURE_LIST }        $$ FIRST_PLUS = class
-    
-    *** FIRST: inherits | eps
-    *** FOLLOW: {
-    CLASS_TYPE -> inherits type_id                  $$ FIRST_PLUS = inherits
-            | eps                                   $$ FIRST_PLUS = { 
-    
-    *** FIRST: object_id | eps
-    *** FOLLOW: }
-    FEATURE_LIST -> FEATURE ; FEATURE_LIST                  $$ FIRST_PLUS = object_id
-                | eps                                       $$ FIRST_PLUS = } 
-    
-    *** FIRST: object_id
-    *** FOLLOW: ; 
-    FEATURE -> object_id FEATURE_REST               $$ FIRST_PLUS = object_id
-    
-    *** FIRST: ( | :
-    *** FOLLOW: ;
-    FEATURE_REST -> ( OPT_FEATURE_ARGS ) : type { EXPR }    $$ FIRST_PLUS = (
-                |   : type OPT_EXPR_ASSIGNMENT              $$ FIRST_PLUS = :
-    
-    *** FIRST: object_id | eps
-    *** FOLLOW: )
-    OPT_FEATURE_ARGS -> FEATURE_ARGS                $$ FIRST_PLUS = object_id
-                    | eps                           $$ FIRST_PLUS = ) 
-    
-    *** FIRST: object_id
-    *** FOLLOW: )
-    FEATURE_ARGS -> FORMAL MORE_FEATURE_ARGS                  $$ FIRST_PLUS = object_id
-    
-    *** FIRST: , | eps
-    *** FOLLOW: )
-    MORE_FEATURE_ARGS -> , FORMAL MORE_FEATURE_ARGS         $$ FIRST_PLUS = ,
-                     | eps                                  $$ FIRST_PLUS = )
-    
-    *** FIRST: <- | eps
-    *** FOLLOW: ; | , | in
-    OPT_EXPR_ASSIGNMENT -> EXPR_ASSIGNMENT          $$ FIRST_PLUS = <-
-                        | eps                       $$ FIRST_PLUS = ; | , | in 
-    
-    *** FIRST: <-
-    *** FOLLOW: ; | , | in
-    EXPR_ASSIGNMENT -> <- EXPR                      $$ FIRST_PLUS = <-
-    
-    *** FIRST: object_id
-    *** FOLLOW: , | )
-    FORMAL -> object_id : type_id                   $$ FIRST_PLUS = object_id
-        
-    *** FIRST: object_id | integer | string | true | false | ( | ~ | isvoid | not | if | while | { | let | case | new
-    *** FOLLOW: } | ; | in | ) | then | else | fi | loop | pool | of | , 
-    EXPR -> ID OBJECT_ID_OP                                     $$ FIRST_PLUS = object_id
-        |   ASSIGNMENT_EXPR                                     $$ FIRST_PLUS = integer | string | true | false | ( | ~ | isvoid | not
-        |   if EXPR then EXPR else EXPR fi                      $$ FIRST_PLUS = if
-        |   while EXPR loop EXPR pool                           $$ FIRST_PLUS = while
-        |   { EXPR_LIST }                                       $$ FIRST_PLUS = {
-        |   let LET_ARGS in EXPR                                $$ FIRST_PLUS = let
-        |   case EXPR of CASE_ARGS esac                         $$ FIRST_PLUS = case
-        |   new type_id                                         $$ FIRST_PLUS = new
-
-    *** FIRST: object_id 
-    *** FOLLOW: ( | <- | } | ; | in | ) | then | else | fi | loop | pool | of | , 
-    ID -> object_id                                     $$ FIRST_PLUS = object_id
-
-    *** FIRST: ( | <- | eps
-    *** FOLLOW: } | ; | in | ) | then | else | fi | loop | pool | of | ,  
-    OBJECT_ID_OP -> ( OPT_EXPR_ARGS )                           $$ FIRST_PLUS = (
-                |   <- ASSIGNMENT_EXPR                          $$ FIRST_PLUS = <-
-                |   eps                                         $$ FIRST_PLUS = } | ; | in | ) | then | else | fi | loop | pool | of | , 
-            
-    *** FIRST: integer | string | true | false | ( | ~ | isvoid | not 
-    *** FOLLOW: } | ; | in | ) | then | else | fi | loop | pool | of | , 
-    ASSIGNMENT_EXPR -> not BOOLEAN_COMPLEMENT_EXPR              $$ FIRST_PLUS = not
-                    | BOOLEAN_COMPLEMENT_EXPR                   $$ FIRST_PLUS = integer | string | true | false | ( | ~ | isvoid 
-
-    *** FIRST: integer | string | true | false | ( | ~ | isvoid 
-    *** FOLLOW: } | ; | in | ) | then | else | fi | loop | pool | of | , 
-    BOOLEAN_COMPLEMENT_EXPR -> COMPARISON_EXPR COMPARISON_OP    $$ FIRST_PLUS = integer | string | true | false | ( | ~ | isvoid 
-    
-    *** FIRST: <= | < | = | eps
-    *** FOLLOW: } | ; | in | ) | then | else | fi | loop | pool | of | , 
-    COMPARISON_OP -> <= COMPARISON_EXPR COMPARISON_OP           $$ FIRST_PLUS = <=
-                  |  < COMPARISON_EXPR COMPARISON_OP            $$ FIRST_PLUS = < 
-                  |  = COMPARISON_EXPR COMPARISON_OP            $$ FIRST_PLUS = =
-                  |  eps                                        $$ FIRST_PLUS = } | ; | in | ) | then | else | fi | loop | pool | of | , 
-                    
-    *** FIRST: integer | string | true | false | ( | ~ | isvoid 
-    *** FOLLOW: <= | < | = | } | ; | in | ) | then | else | fi | loop | pool | of | , 
-    COMPARISON_EXPR -> ADD_EXPR ADD_OP              $$ FIRST_PLUS = integer | string | true | false | ( | ~ | isvoid 
-    
-    *** FIRST: + | - | eps
-    *** FOLLOW: <= | < | = | } | ; | in | ) | then | else | fi | loop | pool | of | ,
-    ADD_OP -> + ADD_EXPR ADD_OP                     $$ FIRST_PLUS = +
-             |  - ADD_EXPR ADD_OP                   $$ FIRST_PLUS = - 
-             |  eps                                 $$ FIRST_PLUS = <= | < | = | } | ; | in | ) | then | else | fi | loop | pool | of | ,
-                
-    *** FIRST: integer | string | true | false | ( | ~ | isvoid 
-    *** FOLLOW: + | - | <= | < | = | } | ; | in | ) | then | else | fi | loop | pool | of | ,
-    ADD_EXPR -> MULT_EXPR MULT_OP                   $$ FIRST_PLUS = integer | string | true | false | ( | ~ | isvoid 
-    
-    *** FIRST: * | / | eps
-    *** FOLLOW: + | - | <= | < | = | } | ; | in | ) | then | else | fi | loop | pool | of | ,
-    MULT_OP -> * MULT_EXPR MULT_OP                      $$ FIRST_PLUS = *
-             | / MULT_EXPR MULT_OP                      $$ FIRST_PLUS = / 
-             | eps                                      $$ FIRST_PLUS = + | - | <= | < | = | } | ; | in | ) | then | else | fi | loop | pool | of | , 
-
-    *** FIRST: integer | string | true | false | ( | ~ | isvoid 
-    *** FOLLOW: * | / | + | - | <= | < | = | } | ; | in | ) | then | else | fi | loop | pool | of | ,
-    MULT_EXPR -> isvoid CHECKVOID_EXPR                  $$ FIRST_PLUS = isvoid
-                | CHECKVOID_EXPR                        $$ FIRST_PLUS = integer | string | true | false | ( | ~
-    
-    *** FIRST: integer | string | true | false | ( | ~
-    *** FOLLOW: * | / | + | - | <= | < | = | } | ; | in | ) | then | else | fi | loop | pool | of | ,
-    CHECKVOID_EXPR -> ~ INTEGER_COMPLEMENT_EXPR               $$ FIRST_PLUS = ~
-                    | INTEGER_COMPLEMENT_EXPR                 $$ FIRST_PLUS =  integer | string | true | false | (  
-    
-    *** FIRST:  integer | string | true | false | (  
-    *** FOLLOW: * | / | + | - | <= | < | = | } | ; | in | ) | then | else | fi | loop | pool | of | ,
-    INTEGER_COMPLEMENT_EXPR -> DISPATCH_TYPE_EXPR DISPATCH_TYPE_OP       $$ FIRST_PLUS =  integer | string | true | false | (  
-    
-    *** FIRST: @ | eps
-    *** FOLLOW: * | / | + | - | <= | < | = | } | ; | in | ) | then | else | fi | loop | pool | of | ,
-    DISPATCH_TYPE_OP -> @ type_id                       $$ FIRST_PLUS = @
-                      | eps                             $$ FIRST_PLUS = * | / | + | - | <= | < | = | } | ; | in | ) | then | else | fi | loop | pool | of | ,
-                    
-    *** FIRST: integer | string | true | false | (  
-    *** FOLLOW: @ | * | / | + | - | <= | < | = | } | ; | in | ) | then | else | fi | loop | pool | of | , 
-    DISPATCH_TYPE_EXPR -> DISPATCH_EXPR DISPATCH_OP     $$ FIRST_PLUS = integer | string | true | false | (  
-    
-    *** FIRST: . | eps
-    *** FOLLOW: @ | * | / | + | - | <= | < | = | } | ; | in | ) | then | else | fi | loop | pool | of | , 
-    DISPATCH_OP -> . object_id ( OPT_EXPR_ARGS )            $$ FIRST_PLUS = .
-                | eps                                   $$ FIRST_PLUS = @ | * | / | + | - | <= | < | = | } | ; | in | ) | then | else | fi | loop | pool | of | , 
-    
-    *** FIRST: integer | string | true | false | ( 
-    *** FOLLOW: . | @ | * | / | + | - | <= | < | = | } | ; | in | ) | then | else | fi | loop | pool | of | , 
-    DISPATCH_EXPR -> CONSTANT                               $$ FIRST_PLUS = integer | string | true | false
-                    | ( EXPR )                              $$ FIRST_PLUS = (
-    
-    *** FIRST: integer | string | true | false
-    *** FOLLOW: . | @ | * | / | + | - | <= | < | = | } | ; | in | ) | then | else | fi | loop | pool | of | ,
-    CONSTANT -> integer                                 $$ FIRST_PLUS = integer
-            | string                                    $$ FIRST_PLUS = string
-            | true                                      $$ FIRST_PLUS = true
-            | false                                     $$ FIRST_PLUS = false
-    
-    *** FIRST: object_id | integer | string | true | false | ( | ~ | isvoid | not | if | while | { | let | case | new | eps
-    *** FOLLOW: )
-    OPT_EXPR_ARGS -> EXPR_ARGS                             $$ FIRST_PLUS = object_id | integer | string | true | false | ( | ~ | isvoid | not | if | while | { | let | case | new
-            | eps                                          $$ FIRST_PLUS = )
-    
-    *** FIRST: object_id | integer | string | true | false | ( | ~ | isvoid | not | if | while | { | let | case | new
-    *** FOLLOW: )
-    EXPR_ARGS -> EXPR MORE_EXPR_ARGS                      $$ FIRST_PLUS = object_id | integer | string | true | false | ( | ~ | isvoid | not | if | while | { | let | case | new
-    
-    *** FIRST: , | eps
-    *** FOLLOW: )
-    MORE_EXPR_ARGS -> , EXPR MORE_EXPR_ARGS             $$ FIRST_PLUS = ,
-                | eps                                   $$ FIRST_PLUS = )
-    
-    *** FIRST: object_id | integer | string | true | false | ( | ~ | isvoid | not | if | while | { | let | case | new
-    *** FOLLOW: } | FOLLOW(MORE_EXPRS)  
-    EXPR_LIST -> EXPR ; MORE_EXPRs                      $$ FIRST_PLUS = object_id | integer | string | true | false | ( | ~ | isvoid | not | if | while | { | let | case | new
-    
-    *** FIRST: object_id | integer | string | true | false | (  | if | while | { | let | case | new | ~ | isvoid | not | eps
-    *** FOLLOW: FOLLOW(EXPR_LIST) = }
-    MORE_EXPRS -> EXPR_LIST                             $$ FIRST_PLUS = object_id | integer | string | true | false | ( | ~ | isvoid | not | if | while | { | let | case | new
-                | eps                                   $$ FIRST_PLUS = }
-    
-    *** FIRST: object_id
-    *** FOLLOW: in
-    LET_ARGS ->  LET_ARG MORE_LET_ARGS                       $$ FIRST_PLUS = object_id
-    
-    *** FIRST: , | eps
-    *** FOLLOW: in
-    MORE_LET_ARGS -> , LET_ARG MORE_LET_ARGS                    $$ FIRST_PLUS = ,
-                | eps                                           $$ FIRST_PLUS = in
-    
-    *** FIRST: object_id            
-    *** FOLLOW: , | in
-    LET_ARG -> object_id : type_id OPT_EXPR_ASSIGNMENT   $$ FIRST_PLUS = object_id    
-    
-    *** FIRST: object_id
-    *** FOLLOW: esac | FOLLOW(MORE_CASE_ARGS)
-    CASE_ARGS -> CASE_ARG MORE_CASE_ARGS            $$ FIRST_PLUS = object_id
-    
-    *** FIRST: object_id | eps
-    *** FOLLOW: FOLLOW(CASE_ARGS) = esac
-    MORE_CASE_ARGS -> CASE_ARGS                 $$ FIRST_PLUS = object_id
-                    | eps                       $$ FIRST_PLUS = esac
-    
-    *** FIRST: object_id 
-    *** FOLLOW: object_id | esac | FOLLOW(MORE_CASE_ARGS)
-    CASE_ARG -> object_id : type_id => EXPR ;        $$ FIRST_PLUS = object_id
-
-"""

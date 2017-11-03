@@ -42,3 +42,8 @@ trouble adding precedence. at first i moved the expr expansions not mentioned in
 but this lead to a FIRST+ conflict, because at the highest precedence level I expanded to object_id, and had expansions starting w/ object_id
 at the lowest level. But moving to the lowest precedence level solved it.
 
+do ll(k) instead of backtracking since it makes error reporting easier. if ,ethod fails then know parse has failed, and can pass error messages
+
+
+ambiguous about where to place the operators in expr that weren't listed on the precedence figure. I placed them all at the lowest level but then needed to move
+ID ( EXPR_LIST ) to the highest level.
