@@ -1,3 +1,19 @@
+
+Implemented a predictive recursive descent parser for the Cool language. As per the specification there is error
+recovery and .
+Based on the grammar given in the language in the specification, it was necessary to transform the grammar.
+Tried to convert to a LL(1) grammar.
+The first steps were to remove the regex shortenings given in the grammar.
+Then I removed the left recursion. Removed the direct recursion following the algorithm. Didn't use the algorithm
+for indirect recursion; instead I manually inspected the grammar to check the grammar and made sure that there wasn't
+any indirect left recursion by mentally following the different productions and seeing the ways it was possible for
+them to expand.
+Once it was in this form it was suitable for top down parsing, and it would be possible to write a backtracking parser
+for it. However, I decided to go with the predictive parser because it is more efficient, and it makes the error detection/ recovery phase
+more simple.
+I then left factored the grammar. Left factoring is . Then I calculated the FIRST, FOLLOW and FIRST+ sets.
+I encountered an issue.
+
 modify grammar so it can be top down parsed w/out backtracking.
 
 backtracking easier to implement, but less efficient. Run time of backtrack free is linear wrt sentence length, whereas
@@ -47,3 +63,14 @@ do ll(k) instead of backtracking since it makes error reporting easier. if ,etho
 
 ambiguous about where to place the operators in expr that weren't listed on the precedence figure. I placed them all at the lowest level but then needed to move
 ID ( EXPR_LIST ) to the highest level.
+
+
+moving the other expressions to element introduced first+ conflicts, since now FOLLOW(ELEMENT) in FOLLOW(EXPR). this propagates down the levels. so, for each
+operator for example there is a conflict. first+(epsilon) contains the operator.
+
+'The <expr> of a let extends as far (encompasses as many tokens) as the grammar allows.
+This means there can be no ambiguity such as: LET_EXPR + id
+LET_EXPR will consume id.
+The conflicts that let_expr introduces in the first_plus sets of operators can thus be ignored because of this behaviour.
+Thus always give precedence to the more specific rule. e.g. + MULT_EXPR ADD_OP
+instead of eps ALWAYS even though + is in FIRST_PLUS set of eps.

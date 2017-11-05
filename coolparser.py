@@ -1,13 +1,14 @@
 import sys
 import shlex
-import cool_lexer
 from cool_lexer import next_token
 from cool_lexer import peek_token
 from cool_lexer import Token
 
 
 token = Token('', '')
-
+classes = []
+class_methods = []
+errors = []
 
 def parse(filename):
     # open file
@@ -22,6 +23,8 @@ def parse(filename):
 
         if program(lexer):
             print("No errors found")
+            for c in classes:
+                print(c)
         else:
             print("Errors found")
 
@@ -62,6 +65,8 @@ def _class(lexer):
     if token.name == "class":
         token = next_token(lexer)
         if token.name == "type_id":
+            class_name = token.val
+            class_methods.clear()
             token = next_token(lexer)
             if class_type(lexer):
                 if token.name == "{":
@@ -69,6 +74,11 @@ def _class(lexer):
                     if feature_list(lexer):
                         if token.name == "}":
                             token = next_token(lexer)
+                            class_summary = class_name + ": "
+                            for method in class_methods:
+                                class_summary += method + ", "
+                            # slice last comma off and add to classes
+                            classes.append(class_summary[:-2])
                             return True
                         else:
                             fail("class", lexer)
@@ -102,8 +112,11 @@ def feature_list(lexer):
 def feature(lexer):
     global token
     if token.name == "object_id":
+        feature_id = token.val
         token = next_token(lexer)
-        return feature_rest(lexer)
+        is_valid_feature_rest, feature_type = feature_rest(lexer)
+        class_methods.append(feature_id)
+        return is_valid_feature_rest
     raise Exception
 
 
@@ -123,12 +136,12 @@ def feature_rest(lexer):
                             if expr(lexer):
                                 if token.name == "}":
                                     token = next_token(lexer)
-                                    return True
+                                    return True, "method"
     elif token.name == ":":
         token = next_token(lexer)
         if token.name == "type_id":
             token = next_token(lexer)
-            return opt_expr_assignment(lexer)
+            return opt_expr_assignment(lexer), ""
     raise Exception
 
 
@@ -198,58 +211,12 @@ def expr(lexer):
             if _id(lexer):
                 if token.name == "<-":
                     token = next_token(lexer)
-                    return boolean_complement_expr(lexer)
+                    return expr(lexer)
         else:
             return boolean_complement_expr(lexer)
-    elif token.name in ["integer", "string", "true", "false", "(", "~", "isvoid", "not"]:
+    elif token.name in ["integer", "string", "true", "false", "(", "if", "while", "{", "let", "case", "new", "~", "isvoid", "not"]:
         return boolean_complement_expr(lexer)
-    elif token.name == "if":
-        token = next_token(lexer)
-        if expr(lexer):
-            if token.name == "then":
-                token = next_token(lexer)
-                if expr(lexer):
-                    if token.name == "else":
-                        token = next_token(lexer)
-                        if expr(lexer):
-                            if token.name == "fi":
-                                token = next_token(lexer)
-                                return True
-    elif token.name == "while":
-        token = next_token(lexer)
-        if expr(lexer):
-            if token.name == "loop":
-                token = next_token(lexer)
-                if expr(lexer):
-                    if token.name == "pool":
-                        token = next_token(lexer)
-                        return True
-    elif token.name == "{":
-        token = next_token(lexer)
-        if expr_list(lexer):
-            if token.name == "}":
-                token = next_token(lexer)
-                return True
-    elif token.name == "let":
-        token = next_token(lexer)
-        if let_args(lexer):
-            if token.name == "in":
-                token = next_token(lexer)
-                return expr(lexer)
-    elif token.name == "case":
-        token = next_token(lexer)
-        if expr(lexer):
-            if token.name == "of":
-                token = next_token(lexer)
-                if case_args(lexer):
-                    if token.name == "esac":
-                        token = next_token(lexer)
-                        return True
-    elif token.name == "new":
-        token = next_token(lexer)
-        if token.name == "type_id":
-            token = next_token(lexer)
-            return True
+
     raise Exception
 
 
@@ -257,8 +224,8 @@ def boolean_complement_expr(lexer):
     global token
     if token.name == "not":
         token = next_token(lexer)
-        return comparison_expr(lexer)
-    elif token.name in ['integer', 'string', 'true', 'false', '(', 'object_id', '~', 'isvoid']:
+        return boolean_complement_expr(lexer)
+    elif token.name in ['integer', 'string', 'true', 'false', '(', 'object_id', 'if', 'while', '{', 'let', 'case', 'new', '~', 'isvoid']:
         return comparison_expr(lexer)
     raise Exception
 
@@ -334,8 +301,8 @@ def checkvoid_expr(lexer):
     global token
     if token.name == "isvoid":
         token = next_token(lexer)
-        return integer_complement_expr(lexer)
-    elif token.name in ['integer', 'string', 'true', 'false', '(', 'object_id', '~']:
+        return checkvoid_expr(lexer)
+    elif token.name in ['integer', 'string', 'true', 'false', '(', 'object_id', 'if', 'while', '{', 'let', 'case', 'new', '~']:
         return integer_complement_expr(lexer)
     raise Exception
 
@@ -344,28 +311,9 @@ def integer_complement_expr(lexer):
     global token
     if token.name == "~":
         token = next_token(lexer)
-        return dispatch_type_expr(lexer)
-    elif token.name in ['integer', 'string', 'true', 'false', '(', 'object_id']:
-        return dispatch_type_expr(lexer)
-    raise Exception
-
-
-def dispatch_type_expr(lexer):
-    global token
-    if dispatch_expr(lexer):
-        return dispatch_type_op(lexer)
-    raise Exception
-
-
-def dispatch_type_op(lexer):
-    global token
-    if token.name == "@":
-        token = next_token(lexer)
-        if token.name == "type_id":
-            token = next_token(lexer)
-            return True
-    elif token.name in ['*', '/', '+', '-', '<=', '<', '=', '}', ';', 'in', ')', 'then', 'else', 'fi', 'loop', 'pool', 'of', ',']:
-        return True
+        return integer_complement_expr(lexer)
+    elif token.name in ['integer', 'string', 'true', 'false', '(', 'object_id', 'if', 'while', '{', 'let', 'case', 'new']:
+        return dispatch_expr(lexer)
     raise Exception
 
 
@@ -378,17 +326,31 @@ def dispatch_expr(lexer):
 
 def dispatch_op(lexer):
     global token
-    if token.name == ".":
-        token = next_token(lexer)
-        if token.name == "object_id":
-            token = next_token(lexer)
-            if token.name == "(":
+    if token.name == "@" or token.name == ".":
+        if dispatch_type(lexer):
+            if token.name == ".":
                 token = next_token(lexer)
-                if opt_expr_args(lexer):
-                    if token.name == ")":
+                if token.name == "object_id":
+                    token = next_token(lexer)
+                    if token.name == "(":
                         token = next_token(lexer)
-                        return True
-    elif token.name in ['@', '*', '/', '+', '-', '<=', '<', '=', '}', ';', 'in', ')', 'then', 'else', 'fi', 'loop', 'pool', 'of', ',']:
+                        if opt_expr_args(lexer):
+                            if token.name == ")":
+                                token = next_token(lexer)
+                                return dispatch_op(lexer)
+    elif token.name in ['*', '/', '+', '-', '<=', '<', '=', '}', ';', 'in', ')', 'then', 'else', 'fi', 'loop', 'pool', 'of', ',']:
+        return True
+    raise Exception
+
+
+def dispatch_type(lexer):
+    global token
+    if token.name == "@":
+        token = next_token(lexer)
+        if token.name == "type_id":
+            token = next_token(lexer)
+            return True
+    elif token.name == '.':
         return True
     raise Exception
 
@@ -406,6 +368,53 @@ def element(lexer):
     elif token.name == 'object_id':
         if _id(lexer):
             return id_op(lexer)
+    elif token.name == "if":
+        token = next_token(lexer)
+        if expr(lexer):
+            if token.name == "then":
+                token = next_token(lexer)
+                if expr(lexer):
+                    if token.name == "else":
+                        token = next_token(lexer)
+                        if expr(lexer):
+                            if token.name == "fi":
+                                token = next_token(lexer)
+                                return True
+    elif token.name == "while":
+        token = next_token(lexer)
+        if expr(lexer):
+            if token.name == "loop":
+                token = next_token(lexer)
+                if expr(lexer):
+                    if token.name == "pool":
+                        token = next_token(lexer)
+                        return True
+    elif token.name == "{":
+        token = next_token(lexer)
+        if expr_list(lexer):
+            if token.name == "}":
+                token = next_token(lexer)
+                return True
+    elif token.name == "let":
+        token = next_token(lexer)
+        if let_args(lexer):
+            if token.name == "in":
+                token = next_token(lexer)
+                return expr(lexer)
+    elif token.name == "case":
+        token = next_token(lexer)
+        if expr(lexer):
+            if token.name == "of":
+                token = next_token(lexer)
+                if case_args(lexer):
+                    if token.name == "esac":
+                        token = next_token(lexer)
+                        return True
+    elif token.name == "new":
+        token = next_token(lexer)
+        if token.name == "type_id":
+            token = next_token(lexer)
+            return True
     raise Exception
 
 
@@ -557,7 +566,8 @@ def case_arg(lexer):
                         if token.name == ";":
                             token = next_token(lexer)
                             return True
-    raise Exception
+    else:
+        error = "Unexpected token {0} on line {1}, column {2}. Expected one of: object_id".format(token.val, )
 
 
 if __name__ == "__main__":
