@@ -95,18 +95,7 @@ def lex(lexer):
         """
 
 
-peeked = False
-# buffer of size 2 to store tokens for potential lookahead(2)
-lookahead_buffer = Token('', '')
-
-
 def next_token(lexer):
-    global peeked
-    global lookahead_buffer
-    if peeked:
-        peeked = False
-        return lookahead_buffer
-
     # candidate string, switch w/ lexeme types. pass lexeme type?
     # list, precompiled regexes. get string token from shlex then pass it thru, returnign lex error if necessary else
     # returning an encoding of a token types
@@ -116,15 +105,15 @@ def next_token(lexer):
         lexeme += lexer.get_token()
     if lexeme == lexer.eof:
         return Token("eof", "")
-    lookahead_buffer = match_pattern(lexeme, lexer)
-    return lookahead_buffer
+    return match_pattern(lexeme, lexer)
 
 
 def peek_token(lexer):
-    global peeked
     nt = next_token(lexer)
-    peeked = True
+    # push it back on the stack so the next call to next_token returns the same result
+    lexer.push_token(nt.val)
     return nt
+
 
 def match_pattern(lexeme, lexer):
     """
