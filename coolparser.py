@@ -1,28 +1,47 @@
 import sys
 import shlex
+import cool_lexer
 from cool_lexer import next_token
 from cool_lexer import peek_token
 from cool_lexer import Token
 
 
-token = Token('', '', 0, 0, '')
-classes = []
-class_methods = []
-errors = []
+# init global vars
+classes = []  # keeps track of the summaries for each parsed class so far
+class_methods = []  # keeps track of methods while parsing a class
+errors = []  # keeps track of errors
+
+FIRST_PLUS = {}
+FOLLOW = {}
+FIRST = {}
+
+"""
+def next_token(lexer):
+    global token
+    try:
+        token = cool_lexer.next_token(lexer)
+    except cool_lexer.LexError:
+        errors.append("Lexical error. Unrecognized token = {0}".format(token))
+        next_token(lexer)  # keep trying until a valid token is found
+"""
 
 
 def parse(filename):
     # open file
     with open(filename) as f:
-        # input_file = f.read()
         lexer = shlex.shlex(f)
-        lexer.whitespace_split = True
-        lexer.quotes = ''  # disable shlex quote behaviour
+        # split only on newlines
         lexer.whitespace = '\r\n'
+        lexer.whitespace_split = True
 
-        global token
+        # disable shlex quote behaviour
+        lexer.quotes = ''
+
         token = next_token(lexer)
 
+        # program(lexer)
+        # if len(errors) == 0:
+        #
         if program(lexer):
             print("No errors found")
             for class_summary in classes:
@@ -40,9 +59,9 @@ def error_msg(incorrect_token, *expected_tokens):
     for expected_token in expected_tokens:
         error += expected_token + ", "
     error = error[:-2] + "\n"  # remove last comma
-    error += token.line
+    error += incorrect_token.line
     error += "\n"
-    for index, char in enumerate(token.line):
+    for index, char in enumerate(incorrect_token.line):
         if index == incorrect_token.column_index:
             error += "^"
             break
@@ -51,6 +70,45 @@ def error_msg(incorrect_token, *expected_tokens):
         else:
             error += " "
     return error
+
+
+def recover(lexer, first, follow):
+    global token
+    while token.name not in first and token.name not in follow and token.name != "eof":
+        token = next_token(lexer)
+    if token.name in first:
+        # continue trying to parse the nt
+        return True
+    elif token.name in follow:
+        # return from this nt and go to parent
+        return False
+    elif token.name == "eof":
+        # ret false? haven't recovered?
+        # in case eof is in the follow set, it will be discovered in the previous elif.
+        return False
+
+
+#def match(lexer, follow, *terminals, first_plus=None):
+def match(lexer, first, follow, *terminals):
+    global token
+    for terminal in terminals:
+        if token.name == terminal:
+            token = next_token(lexer)
+            return
+    # no terminal matched.
+    error = error_msg(token, terminals)
+    errors.append(error)
+    # recover
+    return recover(lexer, first, follow)
+    # need nt state.
+    if first_plus is not None:
+        return recover(lexer, first_plus, follow)
+    else:
+        return recover(lexer, terminals, follow)
+
+
+FIRST['program'] = ['class']
+FOLLOW['program'] = ['eof']
 
 
 def program(lexer):
@@ -70,15 +128,22 @@ def program(lexer):
 
 
 def program_rest(lexer):
+    """
+    *** FIRST: class
+    *** FOLLOW: eof
+    PROGRAM_REST -> PROGRAM                         $$ FIRST_PLUS = class
+                |   eps                             $$ FIRST_PLUS = eof
+    """
     global token
     if token.name == "class":
         return program(lexer)
     elif token.name == "eof":
         return True
     else:
-        error = error_msg(token, "class", "eof")
-        errors.append(error)
-        return False
+        if match(lexer, ["class", "eof"], ["eof"]):
+            return program_rest(lexer)
+        else:
+            return
 
 
 def _class(lexer):
@@ -102,7 +167,8 @@ def _class(lexer):
                             classes.append(class_summary[:-2])
                             return True
                         else:
-                            error_msg("class", lexer)
+                            error = error_msg(token, "}")
+                            errors.append(error)
         else:
             error = error_msg(token, "type_id")
             errors.append(error)
