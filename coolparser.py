@@ -5,7 +5,7 @@ from cool_lexer import peek_token
 from cool_lexer import Token
 
 
-token = Token('', '', 0, 0)
+token = Token('', '', 0, 0, '')
 classes = []
 class_methods = []
 errors = []
@@ -33,11 +33,24 @@ def parse(filename):
                 print(error)
 
 
-def fail(name, lexer):
-    print("Parse error in {0} on line {1}".format(name, lexer.lineno))
-
-
-# lineno, column, tokens expected
+def error_msg(incorrect_token, *expected_tokens):
+    error = "Unexpected token '{0}' on line {1}, column {2}. Expected one of: \n".format(incorrect_token.val,
+                                                                                         incorrect_token.line_no,
+                                                                                         incorrect_token.column_index)
+    for expected_token in expected_tokens:
+        error += expected_token + ", "
+    error = error[:-2] + "\n"  # remove last comma
+    error += token.line
+    error += "\n"
+    for index, char in enumerate(token.line):
+        if index == incorrect_token.column_index:
+            error += "^"
+            break
+        elif char == "\t":
+            error += "\t"
+        else:
+            error += " "
+    return error
 
 
 def program(lexer):
@@ -48,8 +61,10 @@ def program(lexer):
             token = next_token(lexer)
             if program_rest(lexer):
                 return True
-            else:
-                fail("program", lexer)
+        else:
+            error = error_msg(token, ";")
+            errors.append(error)
+            return False
     else:
         return False
 
@@ -61,8 +76,9 @@ def program_rest(lexer):
     elif token.name == "eof":
         return True
     else:
-        fail("program_rest", lexer)
-    raise Exception
+        error = error_msg(token, "class", "eof")
+        errors.append(error)
+        return False
 
 
 def _class(lexer):
@@ -86,13 +102,14 @@ def _class(lexer):
                             classes.append(class_summary[:-2])
                             return True
                         else:
-                            fail("class", lexer)
+                            error_msg("class", lexer)
         else:
-            error = "Unexpected token {0} on line {1}, column {2}. Expected one of: type_id".format(token.val, token.line_no, token.column_index)
+            error = error_msg(token, "type_id")
             errors.append(error)
             return False
     else:
-        error = "Unexpected token {0} on line {1}, column {2}. Expected one of: class".format(token.val, token.line_no, token.column_index)
+        error = "Unexpected token {0} on line {1}, column {2}. Expected one of: class".format(token.val, token.line_no,
+                                                                                              token.column_index)
         errors.append(error)
         return False
 
@@ -226,7 +243,8 @@ def expr(lexer):
                     return expr(lexer)
         else:
             return boolean_complement_expr(lexer)
-    elif token.name in ["integer", "string", "true", "false", "(", "if", "while", "{", "let", "case", "new", "~", "isvoid", "not"]:
+    elif token.name in ["integer", "string", "true", "false", "(", "if", "while", "{", "let", "case", "new", "~",
+                        "isvoid", "not"]:
         return boolean_complement_expr(lexer)
 
     raise Exception
@@ -237,7 +255,8 @@ def boolean_complement_expr(lexer):
     if token.name == "not":
         token = next_token(lexer)
         return boolean_complement_expr(lexer)
-    elif token.name in ['integer', 'string', 'true', 'false', '(', 'object_id', 'if', 'while', '{', 'let', 'case', 'new', '~', 'isvoid']:
+    elif token.name in ['integer', 'string', 'true', 'false', '(', 'object_id', 'if', 'while', '{', 'let', 'case',
+                        'new', '~', 'isvoid']:
         return comparison_expr(lexer)
     raise Exception
 
@@ -314,7 +333,8 @@ def checkvoid_expr(lexer):
     if token.name == "isvoid":
         token = next_token(lexer)
         return checkvoid_expr(lexer)
-    elif token.name in ['integer', 'string', 'true', 'false', '(', 'object_id', 'if', 'while', '{', 'let', 'case', 'new', '~']:
+    elif token.name in ['integer', 'string', 'true', 'false', '(', 'object_id', 'if', 'while', '{', 'let', 'case',
+                        'new', '~']:
         return integer_complement_expr(lexer)
     raise Exception
 
@@ -324,7 +344,8 @@ def integer_complement_expr(lexer):
     if token.name == "~":
         token = next_token(lexer)
         return integer_complement_expr(lexer)
-    elif token.name in ['integer', 'string', 'true', 'false', '(', 'object_id', 'if', 'while', '{', 'let', 'case', 'new']:
+    elif token.name in ['integer', 'string', 'true', 'false', '(', 'object_id', 'if', 'while', '{', 'let', 'case',
+                        'new']:
         return dispatch_expr(lexer)
     raise Exception
 
@@ -350,7 +371,8 @@ def dispatch_op(lexer):
                             if token.name == ")":
                                 token = next_token(lexer)
                                 return dispatch_op(lexer)
-    elif token.name in ['*', '/', '+', '-', '<=', '<', '=', '}', ';', 'in', ')', 'then', 'else', 'fi', 'loop', 'pool', 'of', ',']:
+    elif token.name in ['*', '/', '+', '-', '<=', '<', '=', '}', ';', 'in', ')', 'then', 'else', 'fi', 'loop',
+                        'pool', 'of', ',']:
         return True
     raise Exception
 
@@ -463,14 +485,16 @@ def id_op(lexer):
             if token.name == ")":
                 token = next_token(lexer)
                 return True
-    elif token.name in ['.', '@', '*', '/', '+', '-', '<=', '<', '=', '}', ';', 'in', ')', 'then', 'else', 'fi', 'loop','pool', 'of', ',']:
+    elif token.name in ['.', '@', '*', '/', '+', '-', '<=', '<', '=', '}', ';', 'in', ')', 'then', 'else', 'fi',
+                        'loop','pool', 'of', ',']:
         return True
     raise Exception
 
 
 def opt_expr_args(lexer):
     global token
-    if token.name in ['object_id', 'integer', 'string', 'true', 'false', '(', '~', 'isvoid', 'not', 'if', 'while', '{', 'let', 'case', 'new']:
+    if token.name in ['object_id', 'integer', 'string', 'true', 'false', '(', '~', 'isvoid', 'not', 'if', 'while',
+                      '{', 'let', 'case', 'new']:
         return expr_args(lexer)
     elif token.name == ")":
         return True
@@ -491,11 +515,11 @@ def more_expr_args(lexer):
         if expr(lexer):
             return more_expr_args(lexer)
         else:
-            fail("more_expr_args", lexer)
+            error_msg("more_expr_args", lexer)
     elif token.name == ")":
         return True
     else:
-        fail("more_expr_args", lexer)
+        error_msg("more_expr_args", lexer)
         return False
     raise Exception
 
@@ -511,7 +535,8 @@ def expr_list(lexer):
 
 def more_exprs(lexer):
     global token
-    if token.name in ['object_id', 'integer', 'string', 'true', 'false', '(', '~', 'isvoid', 'not', 'if', 'while', '{', 'let', 'case', 'new']:
+    if token.name in ['object_id', 'integer', 'string', 'true', 'false', '(', '~', 'isvoid', 'not', 'if', 'while',
+                      '{', 'let', 'case', 'new']:
         return expr_list(lexer)
     elif token.name == "}":
         return True

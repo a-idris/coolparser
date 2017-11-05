@@ -67,10 +67,11 @@ def initialise_patterns():
 # initialise patterns
 patterns = initialise_patterns()
 # use namedtuple to represent tokens
-Token = namedtuple('Token', 'name val line_no column_index')
+Token = namedtuple('Token', 'name val line_no column_index line')
 
 line_no = 0
 column_index = 0
+current_line = ''
 
 
 def next_token(lexer):
@@ -78,24 +79,24 @@ def next_token(lexer):
     # returning an encoding of a token types
     global line_no
     global column_index
+    global current_line
 
     if line_no == 0:
         line_no = lexer.lineno
-    if lexer.lineno - 1 != line_no:
-        line_no = lexer.lineno
-        column_index = 0
 
     while True:
         lexeme = lexer.get_token()
-
+        if lexer.lineno - 1 != line_no:
+            line_no = lexer.lineno - 1  # line_no = lexer.lineno - 1
+            column_index = 0
+            current_line = lexeme
         if lexeme == lexer.eof:
-            return Token("eof", "", line_no, column_index)
-
+            return Token("eof", "eof", line_no, column_index, current_line)
         token_name, matched_str = match_pattern(lexeme, lexer)
         column_index += len(matched_str)
 
         if token_name != "whitespace":
-            return Token(token_name, matched_str, line_no, column_index - len(matched_str))
+            return Token(token_name, matched_str, line_no, column_index - len(matched_str), current_line)
 
 
 def peek_token(lexer):
