@@ -5,7 +5,7 @@ from cool_lexer import peek_token
 from cool_lexer import Token
 
 
-token = Token('', '')
+token = Token('', '', 0, 0)
 classes = []
 class_methods = []
 errors = []
@@ -14,8 +14,8 @@ errors = []
 def parse(filename):
     # open file
     with open(filename) as f:
-        input_file = f.read()
-        lexer = shlex.shlex(input_file)
+        # input_file = f.read()
+        lexer = shlex.shlex(f)
         lexer.whitespace_split = True
         lexer.quotes = ''  # disable shlex quote behaviour
         lexer.whitespace = '\r\n'
@@ -87,8 +87,12 @@ def _class(lexer):
                             return True
                         else:
                             fail("class", lexer)
+        else:
+            error = "Unexpected token {0} on line {1}, column {2}. Expected one of: type_id".format(token.val, token.line_no, token.column_index)
+            errors.append(error)
+            return False
     else:
-        error = "Unexpected token {0} on line {1}, column {2}. Expected one of: class".format(token.val, lexer.lineno, '')
+        error = "Unexpected token {0} on line {1}, column {2}. Expected one of: class".format(token.val, token.line_no, token.column_index)
         errors.append(error)
         return False
 
