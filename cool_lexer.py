@@ -71,30 +71,6 @@ patterns = initialise_patterns()
 Token = namedtuple('Token', 'name val')
 
 
-# remove
-def lex(lexer):
-    while True:
-        token = next_token(lexer)
-        print("<{0}, {1}>".format(token.name, token.val), end=' ')
-        if token.name == "eof":
-            break
-        """
-        # use shlex lexeme splitter, it will split alphanumeric (with _), and individual punctuation symbols.
-        # need to slightly modify so that it matches multichar cool symbols as tokens (e.g. => as => not =,>)
-        lexeme = lexer.get_token()
-
-        while lexeme.count('"') == 1:
-            # if there is an unmatched quote, append shlex tokens until the lexeme has a matched quote
-            lexeme += lexer.get_token()
-
-        # print("<{0}>".format(lexeme), end=', ')
-        if lexeme == lexer.eof:
-            break
-        token = match_pattern(lexeme, lexer)
-        print("<{0}, {1}>".format(token.name, token.val), end=' ')
-        """
-
-
 def next_token(lexer):
     # candidate string, switch w/ lexeme types. pass lexeme type?
     # list, precompiled regexes. get string token from shlex then pass it thru, returnign lex error if necessary else

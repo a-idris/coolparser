@@ -10,6 +10,7 @@ classes = []
 class_methods = []
 errors = []
 
+
 def parse(filename):
     # open file
     with open(filename) as f:
@@ -17,16 +18,19 @@ def parse(filename):
         lexer = shlex.shlex(input_file)
         lexer.whitespace_split = True
         lexer.quotes = ''  # disable shlex quote behaviour
+        lexer.whitespace = '\r\n'
 
         global token
         token = next_token(lexer)
 
         if program(lexer):
             print("No errors found")
-            for c in classes:
-                print(c)
+            for class_summary in classes:
+                print(class_summary)
         else:
             print("Errors found")
+            for error in errors:
+                print(error)
 
 
 def fail(name, lexer):
@@ -46,7 +50,8 @@ def program(lexer):
                 return True
             else:
                 fail("program", lexer)
-    raise Exception
+    else:
+        return False
 
 
 def program_rest(lexer):
@@ -82,7 +87,10 @@ def _class(lexer):
                             return True
                         else:
                             fail("class", lexer)
-    raise Exception
+    else:
+        error = "Unexpected token {0} on line {1}, column {2}. Expected one of: class".format(token.val, lexer.lineno, '')
+        errors.append(error)
+        return False
 
 
 def class_type(lexer):
@@ -567,7 +575,8 @@ def case_arg(lexer):
                             token = next_token(lexer)
                             return True
     else:
-        error = "Unexpected token {0} on line {1}, column {2}. Expected one of: object_id".format(token.val, )
+        error = "Unexpected token {0} on line {1}, column {2}. Expected one of: object_id".format(token.val, '', '')
+        return False
 
 
 if __name__ == "__main__":
