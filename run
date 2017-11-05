@@ -1,0 +1,7 @@
+#!/bin/bash
+
+for file in /dcs/15/u1525150/cs325/labs/lab2/cool_examples/*.cl; do
+	echo "============== ${file} ============"
+	output="$(python3 coolparser.py $file)"
+	echo "$output"
+done
