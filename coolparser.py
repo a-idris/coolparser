@@ -12,9 +12,8 @@ classes = []  # keeps track of the summaries for each parsed class so far
 class_methods = []  # keeps track of methods while parsing a class
 errors = []  # keeps track of errors
 
-FIRST_PLUS = {}
-FOLLOW = {}
-FIRST = {}
+FOLLOW = {}  # stores the FOLLOW sets for each nonterminal
+FIRST = {}  # stores the union of the FIRST+ sets for each nonterminal's productions
 
 """
 def next_token(lexer):
@@ -148,6 +147,13 @@ def is_in_follow(nonterminal):
     return token.name in FOLLOW[nonterminal]
 
 
+def recover_multiple_first_plus(lexer, nonterminal):
+    if not recover_first(lexer, FIRST[nonterminal], FOLLOW[nonterminal]):
+        return is_in_follow(nonterminal)
+    else:
+        return locals()[nonterminal](lexer) # call the nonterminal function based on its name
+
+
 # use return value of false from a nonterminal to indicate that eof has been reached (prematurely).
 # thus, if match
 
@@ -188,7 +194,7 @@ def program_rest(lexer):
     global token
     if token.name == "class":
         return program(lexer)
-    elif token.name == "eof":
+    elif token.name in FOLLOW['program_rest']:
         return True
     else:
         if not recover_first(lexer, FIRST["program_rest"], FOLLOW["program_rest"]):
@@ -262,7 +268,7 @@ def class_type(lexer):
         else:
             token = next_token(lexer)
             return True
-    elif token.name == "{":
+    elif token.name in FOLLOW['class_type']:
         return True
     else:
         if not recover_first(lexer, FIRST['class_type'], FOLLOW['class_type']):
@@ -288,7 +294,7 @@ def feature_list(lexer):
             if token.name == ";":
                 token = next_token(lexer)
                 return feature_list(lexer)
-    elif token.name == "}":
+    elif token.name in FOLLOW['feature_list']:
         return True
     else:
         if not recover_first(lexer, FIRST['feature_list'], FOLLOW['feature_list']):
@@ -384,7 +390,7 @@ def opt_feature_args(lexer):
     global token
     if token.name == "object_id":
         return feature_args(lexer)
-    elif token.name == ")":
+    elif token.name in FOLLOW['opt_feature_args']:
         return True
     else:
         if not recover_first(lexer, FIRST['opt_feature_args'], FOLLOW['opt_feature_args']):
@@ -425,7 +431,7 @@ def more_feature_args(lexer):
         token = next_token(lexer)
         if formal(lexer):
             return more_feature_args(lexer)
-    elif token.name == ")":
+    elif token.name in FOLLOW['more_feature_args']:
         return True
     else:
         if not match(lexer, FIRST['more_feature_args'], FOLLOW['more_feature_args']):
@@ -449,7 +455,7 @@ def opt_expr_assignment(lexer):
     global token
     if token.name == "<-":
         return expr_assignment(lexer)
-    elif token.name == ";" or token.name == "," or token.name == "in":
+    elif token.name in FOLLOW['opt_expr_assignment']:
         return True
     else:
         if not match(lexer, FIRST['opt_expr_assignment'], FOLLOW['opt_expr_assignment']):
@@ -502,8 +508,9 @@ def formal(lexer):
                 return True
 
 
-FIRST['expr'] = ['']
-FOLLOW['expr'] = ['']
+FIRST['expr'] = ["object_id", "integer", "string", "true", "false", "(", "if", "while", "{", "let", "case", "new", "~",
+                 "isvoid", "not"]
+FOLLOW['expr'] = ['}', ';', 'in', ')', 'then', 'else', 'fi', 'loop', 'pool', 'of', ',']
 
 
 def expr(lexer):
@@ -521,7 +528,9 @@ def expr(lexer):
         peek = peek_token(lexer)
         if peek.name == '<-':
             if _id(lexer):
-                if token.name == "<-":
+                if not match(lexer, FOLLOW['expr'], "<-"):
+                    return is_in_follow('expr')
+                else:
                     token = next_token(lexer)
                     return expr(lexer)
         else:
@@ -529,12 +538,17 @@ def expr(lexer):
     elif token.name in ["integer", "string", "true", "false", "(", "if", "while", "{", "let", "case", "new", "~",
                         "isvoid", "not"]:
         return boolean_complement_expr(lexer)
+    else:
+        if not recover_first(lexer, FIRST['expr'], FOLLOW['expr']):
+            return is_in_follow('expr')
+        else:
+            return expr(lexer)
+    return False
 
-    raise Exception
 
-
-FIRST['boolean_complement_expr'] = ['']
-FOLLOW['boolean_complement_expr'] = ['']
+FIRST['boolean_complement_expr'] = ["integer", "string", "true", "false", "(", "if", "while", "{", "let", "case",
+                                    "new", "~", "isvoid", "not"]
+FOLLOW['boolean_complement_expr'] = ['}', ';', 'in', ')', 'then', 'else', 'fi', 'loop', 'pool', 'of', ',']
 
 
 def boolean_complement_expr(lexer):
@@ -552,11 +566,16 @@ def boolean_complement_expr(lexer):
     elif token.name in ['integer', 'string', 'true', 'false', '(', 'object_id', 'if', 'while', '{', 'let', 'case',
                         'new', '~', 'isvoid']:
         return comparison_expr(lexer)
-    raise Exception
+    else:
+        if not recover_first(lexer, FIRST['boolean_complement_expr'], FOLLOW['boolean_complement_expr']):
+            return is_in_follow('boolean_complement_expr')
+        else:
+            return boolean_complement_expr(lexer)
 
 
-FIRST['comparison_expr'] = ['']
-FOLLOW['comparison_expr'] = ['']
+FIRST['comparison_expr'] = ['integer', 'string', 'true', 'false', '(', 'object_id', 'if', 'while', '{', 'let', 'case',
+                            'new', '~', 'isvoid']
+FOLLOW['comparison_expr'] = ['}', ';', 'in', ')', 'then', 'else', 'fi', 'loop', 'pool', 'of', ',']
 
 
 def comparison_expr(lexer):
@@ -565,16 +584,15 @@ def comparison_expr(lexer):
     * FOLLOW: } | ; | in | ) | then | else | fi | loop | pool | of | ,
     COMPARISON_EXPR -> ADD_EXPR COMPARISON_OP    $$ FIRST_PLUS = integer | string | true | false | ( | object_id
                                                     | if | while | { | let | case | new | ~ | isvoid
-    :param lexer:
-    :return:
     """
     global token
     if add_expr(lexer):
         return comparison_op(lexer)
+    return False
 
 
-FIRST['comparison_op'] = ['']
-FOLLOW['comparison_op'] = ['']
+FIRST['comparison_op'] = ['<=', '<', '=', '}', ';', 'in', ')', 'then', 'else', 'fi', 'loop', 'pool', 'of', ',']
+FOLLOW['comparison_op'] = ['}', ';', 'in', ')', 'then', 'else', 'fi', 'loop', 'pool', 'of', ',']
 
 
 def comparison_op(lexer):
@@ -600,18 +618,27 @@ def comparison_op(lexer):
         token = next_token(lexer)
         if add_expr(lexer):
             return comparison_op(lexer)
-    elif token.name in ['}', ';', 'in', ')', 'then', 'else', 'fi', 'loop', 'pool', 'of', ',']:
+    elif token.name in FOLLOW['comparison_op']:
         return True
-    raise Exception
+    else:
+        # in case token doesn't match any of the first+ sets, discard tokens until reach either a token in the first+
+        # sets, follow set or eof
+        if not recover_first(lexer, FIRST['comparison_op'], FOLLOW['comparison_op']):
+            # if FOLLOW return true, thus parent can resume. if eof, then return false
+            return is_in_follow('comparison_op')
+        else:
+            # if the MATCH reached a token from one of the FIRST+ sets, run the function again and return the results
+            return comparison_op(lexer)
+    return False
 
 
-FIRST['add_expr'] = ['']
-FOLLOW['add_expr'] = ['']
+FIRST['add_expr'] = ['integer', 'string', 'true', 'false', '(', 'object_id', 'if', 'while', '{', 'let', 'case', 'new',
+                     '~', 'isvoid']
+FOLLOW['add_expr'] = ['<=', '<', '=', '}', ';', 'in', ')', 'then', 'else', 'fi', 'loop', 'pool', 'of', ',']
 
 
 def add_expr(lexer):
     """
-
     * FIRST: integer | string | true | false | ( | object_id | if | while | { | let | case | new | ~ | isvoid
     * FOLLOW: <= | < | = | } | ; | in | ) | then | else | fi | loop | pool | of | ,
     ADD_EXPR -> MULT_EXPR ADD_OP              $$ FIRST_PLUS = integer | string | true | false | ( | object_id | if
@@ -620,10 +647,11 @@ def add_expr(lexer):
     global token
     if mult_expr(lexer):
         return add_op(lexer)
+    return False
 
 
-FIRST['add_op'] = ['']
-FOLLOW['add_op'] = ['']
+FIRST['add_op'] = ['+', '-', '<=', '<', '=', '}', ';', 'in', ')', 'then', 'else', 'fi', 'loop', 'pool', 'of', ',']
+FOLLOW['add_op'] = ['<=', '<', '=', '}', ';', 'in', ')', 'then', 'else', 'fi', 'loop', 'pool', 'of', ',']
 
 
 def add_op(lexer):
@@ -644,13 +672,19 @@ def add_op(lexer):
         token = next_token(lexer)
         if mult_expr(lexer):
             return add_op(lexer)
-    elif token.name in ['<=', '<', '=', '}', ';', 'in', ')', 'then', 'else', 'fi', 'loop', 'pool', 'of', ',']:
+    elif token.name in FOLLOW['add_op']:
         return True
-    raise Exception
+    else:
+        if not recover_first(lexer, FIRST['add_op'], FOLLOW['add_op']):
+            return is_in_follow('add_op')
+        else:
+            return add_op(lexer)
+    return False
 
 
-FIRST['mult_expr'] = ['']
-FOLLOW['mult_expr'] = ['']
+FIRST['mult_expr'] = ['integer', 'string', 'true', 'false', '(', 'object_id', 'if', 'while', '{', 'let', 'case', 'new',
+                      '~', 'isvoid']
+FOLLOW['mult_expr'] = ['+', '-', '<=', '<', '=', '}', ';', 'in', ')', 'then', 'else', 'fi', 'loop', 'pool', 'of', ',']
 
 
 def mult_expr(lexer):
@@ -663,10 +697,12 @@ def mult_expr(lexer):
     global token
     if checkvoid_expr(lexer):
         return mult_op(lexer)
+    return False
 
 
-FIRST['mult_op'] = ['']
-FOLLOW['mult_op'] = ['']
+FIRST['mult_op'] = ['*', '/', '+', '-', '<=', '<', '=', '}', ';', 'in', ')', 'then', 'else', 'fi', 'loop', 'pool',
+                    'of', ',']
+FOLLOW['mult_op'] = ['+', '-', '<=', '<', '=', '}', ';', 'in', ')', 'then', 'else', 'fi', 'loop', 'pool', 'of', ',']
 
 
 def mult_op(lexer):
@@ -687,14 +723,21 @@ def mult_op(lexer):
         token = next_token(lexer)
         if checkvoid_expr(lexer):
             return mult_op(lexer)
-    elif token.name in ['+', '-', '<=', '<', '=', '}', ';', 'in', ')', 'then', 'else', 'fi', 'loop', 'pool', 'of', ',']:
+    elif token.name in FOLLOW['mult_op']:
         return True
-    raise Exception
+    else:
+        if not recover_first(lexer, FIRST['mult_op'], FOLLOW['mult_op']):
+            return is_in_follow('mult_op')
+        else:
+            return mult_op(lexer)
+    return False
 
 
-FIRST['checkvoid_expr'] = ['']
-FOLLOW['checkvoid_expr'] = ['']
-
+FIRST['checkvoid_expr'] = ['integer', 'string', 'true', 'false', '(', 'object_id', 'if', 'while', '{', 'let', 'case',
+                           'new', '~', 'isvoid']
+FOLLOW['checkvoid_expr'] = ['*', '/', '+', '-', '<=', '<', '=', '}', ';', 'in', ')', 'then', 'else', 'fi', 'loop',
+                            'pool', 'of', ',']
+GOD FUCKING DMAMIT
 
 def checkvoid_expr(lexer):
     """
@@ -711,11 +754,17 @@ def checkvoid_expr(lexer):
     elif token.name in ['integer', 'string', 'true', 'false', '(', 'object_id', 'if', 'while', '{', 'let', 'case',
                         'new', '~']:
         return integer_complement_expr(lexer)
-    raise Exception
+    else:
+        if not recover_first(lexer, FIRST['checkvoid_expr'], FOLLOW['checkvoid_expr']):
+            return is_in_follow('checkvoid_expr')
+        else:
+            return checkvoid_expr(lexer)
 
 
-FIRST['integer_complement_expr'] = ['']
-FOLLOW['integer_complement_expr'] = ['']
+FIRST['integer_complement_expr'] = ['integer', 'string', 'true', 'false', '(', 'object_id', 'if', 'while', '{', 'let',
+                                    'case', 'new', '~']
+FOLLOW['integer_complement_expr'] = ['*', '/', '+', '-', '<=', '<', '=', '}', ';', 'in', ')', 'then', 'else', 'fi',
+                                     'loop', 'pool', 'of', ',']
 
 
 def integer_complement_expr(lexer):
@@ -736,8 +785,10 @@ def integer_complement_expr(lexer):
     raise Exception
 
 
-FIRST['dispatch_expr'] = ['']
-FOLLOW['dispatch_expr'] = ['']
+FIRST['dispatch_expr'] = ['integer', 'string', 'true', 'false', '(', 'object_id', 'if', 'while', '{', 'let',
+                          'case', 'new']
+FOLLOW['dispatch_expr'] = ['*', '/', '+', '-', '<=', '<', '=', '}', ';', 'in', ')', 'then', 'else', 'fi', 'loop',
+                            'pool', 'of', ',']
 
 
 def dispatch_expr(lexer):
@@ -754,7 +805,8 @@ def dispatch_expr(lexer):
 
 
 FIRST['dispatch_op'] = ['']
-FOLLOW['dispatch_op'] = ['']
+FOLLOW['dispatch_op'] = ['*', '/', '+', '-', '<=', '<', '=', '}', ';', 'in', ')', 'then', 'else', 'fi', 'loop',
+                        'pool', 'of', ',']
 
 
 def dispatch_op(lexer):
@@ -806,8 +858,10 @@ def dispatch_type(lexer):
     raise Exception
 
 
-FIRST['element'] = ['']
-FOLLOW['element'] = ['']
+FIRST['element'] = ['integer', 'string', 'true', 'false', '(', 'object_id', 'if', 'while', '{', 'let',
+                    'case', 'new']
+FOLLOW['element'] = ['.', '@', '*', '/', '+', '-', '<=', '<', '=', '}', ';', 'in', ')', 'then', 'else', 'fi', 'loop',
+                    'pool', 'of', ',']
 
 
 def element(lexer):
@@ -886,8 +940,9 @@ def element(lexer):
     raise Exception
 
 
-FIRST['constant'] = ['']
-FOLLOW['constant'] = ['']
+FIRST['constant'] = ['integer', 'string', 'true', 'false']
+FOLLOW['constant'] = ['.', '@', '*', '/', '+', '-', '<=', '<', '=', '}', ';', 'in', ')', 'then', 'else', 'fi', 'loop',
+                    'pool', 'of', ',']
 
 
 def constant(lexer):
@@ -916,7 +971,8 @@ def constant(lexer):
 
 
 FIRST['_id'] = ['']
-FOLLOW['_id'] = ['']
+FOLLOW['_id'] = ['.', '@', '*', '/', '+', '-', '<=', '<', '=', '}', ';', 'in', ')', 'then', 'else', 'fi', 'loop',
+                'pool', 'of', ',']
 
 
 def _id(lexer):
@@ -933,7 +989,8 @@ def _id(lexer):
 
 
 FIRST['id_op'] = ['']
-FOLLOW['id_op'] = ['']
+FOLLOW['id_op'] = ['.', '@', '*', '/', '+', '-', '<=', '<', '=', '}', ';', 'in', ')', 'then', 'else', 'fi', 'loop',
+                    'pool', 'of', ',']
 
 
 def id_op(lexer):
@@ -957,16 +1014,17 @@ def id_op(lexer):
     raise Exception
 
 
-FIRST['opt_expr_args'] = ['']
-FOLLOW['opt_expr_args'] = ['']
+FIRST['opt_expr_args'] = ["object_id", "integer", "string", "true", "false", "(", "if", "while", "{", "let", "case",
+                          "new", "~", "isvoid", "not", ")"]
+FOLLOW['opt_expr_args'] = [')']
 
 
 def opt_expr_args(lexer):
     """
-    * FIRST: object_id | integer | string | true | false | ( | ~ | isvoid | not | if | while | { | let | case | new | eps
+    * FIRST: object_id | integer | string | true | false | ( | if | while | { | let | case | new | ~ | isvoid | not | eps
     * FOLLOW: )
-    OPT_EXPR_ARGS -> EXPR_ARGS                    $$ FIRST_PLUS = object_id | integer | string | true | false | ( | ~ |
-                                                                | isvoid | not | if | while | { | let | case | new
+    OPT_EXPR_ARGS -> EXPR_ARGS                    $$ FIRST_PLUS = object_id | integer | string | true | false | ( | if |
+                                                                | while | { | let | case | new | ~ | isvoid | not
                     | eps                         $$ FIRST_PLUS = )
     """
     global token
@@ -978,16 +1036,17 @@ def opt_expr_args(lexer):
     raise Exception
 
 
-FIRST['expr_args'] = ['']
+FIRST['expr_args'] = ["object_id", "integer", "string", "true", "false", "(", "if", "while", "{", "let", "case",
+                      "new", "~", "isvoid", "not", ")"]
 FOLLOW['expr_args'] = ['']
 
 
 def expr_args(lexer):
     """
-    * FIRST: object_id | integer | string | true | false | ( | ~ | isvoid | not | if | while | { | let | case | new
+    * FIRST: object_id | integer | string | true | false | ( | if | while | { | let | case | new | ~ | isvoid | not
     * FOLLOW: )
-    EXPR_ARGS -> EXPR MORE_EXPR_ARGS              $$ FIRST_PLUS = object_id | integer | string | true | false | ( | ~ |
-                                                              | isvoid | not | if | while | { | let | case | new
+    EXPR_ARGS -> EXPR MORE_EXPR_ARGS              $$ FIRST_PLUS = object_id | integer | string | true | false | ( | if
+                                                                  | while | { | let | case | new | ~ | isvoid | not
     """
     global token
     if expr(lexer):
@@ -1021,16 +1080,17 @@ def more_expr_args(lexer):
     raise Exception
 
 
-FIRST['expr_list'] = ['']
+FIRST['expr_list'] = ["object_id", "integer", "string", "true", "false", "(", "if", "while", "{", "let", "case",
+                      "new", "~", "isvoid", "not"]
 FOLLOW['expr_list'] = ['']
 
 
 def expr_list(lexer):
     """
-    * FIRST: object_id | integer | string | true | false | ( | ~ | isvoid | not | if | while | { | let | case | new
+    * FIRST: object_id | integer | string | true | false | ( | if | while | { | let | case | new | ~ | isvoid | not
     * FOLLOW: }
-    EXPR_LIST -> EXPR ; MORE_EXPRs              $$ FIRST_PLUS = object_id | integer | string | true | false | ( |
-                                                                | ~ | isvoid | not | if | while | { | let | case | new
+    EXPR_LIST -> EXPR ; MORE_EXPRs              $$ FIRST_PLUS = object_id | integer | string | true | false | ( | if |
+                                                                | while | { | let | case | new | ~ | isvoid | not
     """
     global token
     if expr(lexer):
@@ -1040,7 +1100,8 @@ def expr_list(lexer):
     raise Exception
 
 
-FIRST['more_exprs'] = ['']
+FIRST['more_exprs'] = ["object_id", "integer", "string", "true", "false", "(", "if", "while", "{", "let", "case",
+                       "new", "~", "isvoid", "not", "}"]
 FOLLOW['more_exprs'] = ['']
 
 
@@ -1048,8 +1109,8 @@ def more_exprs(lexer):
     """
     * FIRST: object_id | integer | string | true | false | (  | if | while | { | let | case | new | ~ | isvoid | not | eps
     * FOLLOW: }
-    MORE_EXPRS -> EXPR_LIST                   $$ FIRST_PLUS = object_id | integer | string | true | false | (
-                                                             | ~ | isvoid | not | if | while | { | let | case | new
+    MORE_EXPRS -> EXPR_LIST                   $$ FIRST_PLUS = object_id | integer | string | true | false | (  | if |
+                                                            | while | { | let | case | new | ~ | isvoid | not
                 | eps                         $$ FIRST_PLUS = }
     """
     global token
