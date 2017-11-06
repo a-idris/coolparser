@@ -76,6 +76,9 @@ The conflicts that let_expr introduces in the first_plus sets of operators can t
 Thus always give precedence to the more specific rule. e.g. + MULT_EXPR ADD_OP
 instead of eps ALWAYS even though + is in FIRST_PLUS set of eps.
 
+Thus although the strict theoretical FIRST+ set would be, but the real FIRST+ set would be. I used the real FIRST+ set
+for the predictive parser, since otherwise it wouldn't work.
+
 For error detection, wanted to give the information: token found, line number, column number and tokens expected. However,
 it was an issue finding column number using shlex. So I changed shlex behaviour to only split on newlines, and each token
 my match_pattern would find the longest, highest precedence token that was a starting substring of the token. I added
@@ -86,4 +89,39 @@ If shlex.lineno - 1 != line_no that means the previous call has gone to the next
 
 A caveat is that the column index I output in the error message is by character, so it would count a tab char would only
 advance the counter by 1.
+
+For error recovery, concerning lexical errors, could keep throwing away chars unrecognizable lexemes until a token is recognized, and report this to coolparser.py, which will append
+this to errors. This method doesn't try to guess what the invalid token was supposed to be. It could do that and try substitute for it, perhaps based
+on some string similarity algorithms. This could be a possible improvement to the solution.
+
+Error recovery - 'process of adjusting input stream so that the parser can continue after unexpected input.'
+Different ways of adjusting the input stream include: deletign tokens, inserting tokens and substituting tokens.
+
+Another way to improve could be to use global error repair, which aims to find tghe smallest set of insertions / deletions
+that would convert the string to a syntactically correct string. Such as the Burke-Fisher algorithm. A downside is that
+the runtime is more expensive: with a k token window it is O(k + 2kN), however the advantage is that it may be more accurate.
+
+local recovery involves adjusting the input where the error was detected and after. Global involves adjusting the input from before the point where
+the error was discovered.
+
+
+Did panic-mode recovery, using both first and follow sets. (w/ different behaviour).
+if the token doesn't belong to any of the first+ sets of a nonterminal, discard token until it does. and then proceeed
+to process the nonterminal as normal (storing the error msg). OR discard token until it matches one of the terminals
+in FOLLOW(nonterminal). This second method probably skips more than the first method. But it may be more reliable, meaningful.
+I used a combination of both.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
