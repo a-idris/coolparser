@@ -1,8 +1,6 @@
 import sys
 import shlex
 import cool_lexer
-from cool_lexer import next_token
-from cool_lexer import peek_token
 from cool_lexer import Token
 
 
@@ -15,15 +13,49 @@ errors = []  # keeps track of errors
 FOLLOW = {}  # stores the FOLLOW sets for each nonterminal
 FIRST = {}  # stores the union of the FIRST+ sets for each nonterminal's productions
 
-"""
+
 def next_token(lexer):
-    global token
     try:
-        token = cool_lexer.next_token(lexer)
-    except cool_lexer.LexError:
-        errors.append("Lexical error. Unrecognized token = {0}".format(token))
-        next_token(lexer)  # keep trying until a valid token is found
-"""
+        matched_token = cool_lexer.next_token(lexer)
+        return matched_token
+    except cool_lexer.LexError as le:
+        error = "Lexical error: unrecognized token '{0}' on line {1}, column {2}.\n".format(le.invalid_token.val,
+                                                                                            le.invalid_token.line_no,
+                                                                                            le.invalid_token.column_index + 1)
+        error += le.invalid_token.line
+        error += "\n"
+        for index, char in enumerate(le.invalid_token.line):
+            if index == le.invalid_token.column_index:
+                error += "^"
+                break
+            elif char == "\t":
+                error += "\t"
+            else:
+                error += " "
+        errors.append(error)
+        return next_token(lexer)  # keep trying until a valid token is found
+
+
+def peek_token(lexer):
+    try:
+        matched_token = cool_lexer.peek_token(lexer)
+        return matched_token
+    except cool_lexer.LexError as le:
+        error = "Lexical error: unrecognized token '{0}' on line {1}, column {2}.\n".format(le.invalid_token.val,
+                                                                                            le.invalid_token.line_no,
+                                                                                            le.invalid_token.column_index + 1)
+        error += le.invalid_token.line
+        error += "\n"
+        for index, char in enumerate(le.invalid_token.line):
+            if index == le.invalid_token.column_index:
+                error += "^"
+                break
+            elif char == "\t":
+                error += "\t"
+            else:
+                error += " "
+        errors.append(error)
+        return next_token(lexer)  # keep trying until a valid token is found
 
 
 def parse(filename):
@@ -39,9 +71,6 @@ def parse(filename):
         global token
         token = next_token(lexer)
 
-        # program(lexer)
-        # if len(errors) == 0:
-        #
         if program(lexer) and len(errors) == 0:
             print("No errors found")
             for class_summary in classes:
@@ -49,13 +78,13 @@ def parse(filename):
         else:
             print("Errors found")
             for error in errors:
-                print(error)
+                print(error, end="\n\n")
 
 
 def error_msg(incorrect_token, *expected_tokens):
-    error = "Unexpected token '{0}' on line {1}, column {2}. Expected one of: \n".format(incorrect_token.val,
-                                                                                         incorrect_token.line_no,
-                                                                                         incorrect_token.column_index)
+    error = "Parse error: unexpected token '{0}' on line {1}, column {2}. Expected one of: \n ".format(incorrect_token.val,
+                                                                                                       incorrect_token.line_no,
+                                                                                                       incorrect_token.column_index + 1)
     for expected_token in expected_tokens:
         error += expected_token + ", "
     error = error[:-2] + "\n"  # remove last comma
@@ -70,43 +99,6 @@ def error_msg(incorrect_token, *expected_tokens):
         else:
             error += " "
     return error
-
-
-"""
-def recover1(lexer, first, follow):
-    global token
-    while token.name not in first and token.name not in follow and token.name != "eof":
-        token = next_token(lexer)
-    if token.name in first:
-        # continue trying to parse the nt
-        return True
-    elif token.name in follow:
-        # return from this nt and go to parent
-        return False
-    elif token.name == "eof":
-        # ret false? haven't recovered?
-        # in case eof is in the follow set, it will be discovered in the previous elif.
-        return False
-
-
-#def match(lexer, follow, *terminals, first_plus=None):
-def match1(lexer, first, follow, *terminals):
-    global token
-    for terminal in terminals:
-        if token.name == terminal:
-            token = next_token(lexer)
-            return
-    # no terminal matched.
-    error = error_msg(token, terminals)
-    errors.append(error)
-    # recover
-    return recover(lexer, first, follow)
-    # need nt state.
-    if first_plus is not None:
-        return recover(lexer, first_plus, follow)
-    else:
-        return recover(lexer, terminals, follow)
-"""
 
 
 def recover(lexer, follow, first=None):
@@ -138,7 +130,7 @@ def match(lexer, follow, *terminals):
 
 
 def recover_first(lexer, first, follow):
-    error = error_msg(token, first)
+    error = error_msg(token, *first)
     errors.append(error)
     return recover(lexer, follow, first=first)
 
@@ -155,11 +147,11 @@ def recover_multiple_first_plus(lexer, nonterminal):
         return is_in_follow(nonterminal)
     else:
         # if the recover reached a token from one of the FIRST+ sets, run the function again and return the results
-        return locals()[nonterminal](lexer) # call the nonterminal function based on its name
-
+        return globals()[nonterminal](lexer)  # call the nonterminal function based on its name
 
 # use return value of false from a nonterminal to indicate that eof has been reached (prematurely).
 # thus, if match
+
 
 FIRST['program'] = ['class']
 FOLLOW['program'] = ['eof']
@@ -177,7 +169,7 @@ def program(lexer):
         if not match(lexer, FOLLOW['program'], ";"):
             return is_in_follow('program')
         else:
-            #successful match
+            # successful match
             token = next_token(lexer)
             if program_rest(lexer):
                 return True
@@ -289,7 +281,9 @@ def feature_list(lexer):
     global token
     if token.name == "object_id":
         if feature(lexer):
-            if token.name == ";":
+            if not match(lexer, FOLLOW['feature_list'], ";"):
+                return is_in_follow('feature_list')
+            else:
                 token = next_token(lexer)
                 return feature_list(lexer)
     elif token.name in FOLLOW['feature_list']:
@@ -337,36 +331,36 @@ def feature_rest(lexer):
         token = next_token(lexer)
         if opt_feature_args(lexer):
             if not match(lexer, FOLLOW['feature_rest'], ")"):
-                return is_in_follow('feature_rest')
+                return is_in_follow('feature_rest'), ""  # need to return tuple since this used to pass method name back
             else:
                 token = next_token(lexer)
                 if not match(lexer, FOLLOW['feature_rest'], ":"):
-                    return is_in_follow('feature_rest')
+                    return is_in_follow('feature_rest'), ""
                 else:
                     token = next_token(lexer)
                     if not match(lexer, FOLLOW['feature_rest'], "type_id"):
-                        return is_in_follow('feature_rest')
+                        return is_in_follow('feature_rest'), ""
                     else:
                         token = next_token(lexer)
                         if not match(lexer, FOLLOW['feature_rest'], "{"):
-                            return is_in_follow('feature_rest')
+                            return is_in_follow('feature_rest'), ""
                         else:
                             token = next_token(lexer)
                             if expr(lexer):
                                 if not match(lexer, FOLLOW['feature_rest'], "}"):
-                                    return is_in_follow('feature_rest')
+                                    return is_in_follow('feature_rest'), ""
                                 else:
                                     token = next_token(lexer)
                                     return True, "method"
     elif token.name == ":":
         token = next_token(lexer)
         if not match(lexer, FOLLOW['feature_rest'], "type_id"):
-            return is_in_follow('feature_rest')
+            return is_in_follow('feature_rest'), ""
         else:
             token = next_token(lexer)
             return opt_expr_assignment(lexer), "attribute"
     else:
-        return recover_multiple_first_plus(lexer, 'feature_rest')
+        return recover_multiple_first_plus(lexer, 'feature_rest'), ""
     return False
 
 
@@ -539,7 +533,7 @@ def boolean_complement_expr(lexer):
     * FOLLOW: } | ; | in | ) | then | else | fi | loop | pool | of | ,
     BOOLEAN_COMPLEMENT_EXPR -> not BOOLEAN_COMPLEMENT_EXPR 		$$ FIRST_PLUS = not
                             | COMPARISON_EXPR                   $$ FIRST_PLUS = integer | string | true | false | ( |
-                                                                   | object_id | if | while | { | let | case | new | ~ | isvoid
+                                                           | object_id | if | while | { | let | case | new | ~ | isvoid
     """
     global token
     if token.name == "not":
@@ -752,7 +746,7 @@ def integer_complement_expr(lexer):
 FIRST['dispatch_expr'] = ['integer', 'string', 'true', 'false', '(', 'object_id', 'if', 'while', '{', 'let',
                           'case', 'new']
 FOLLOW['dispatch_expr'] = ['*', '/', '+', '-', '<=', '<', '=', '}', ';', 'in', ')', 'then', 'else', 'fi', 'loop',
-                            'pool', 'of', ',']
+                           'pool', 'of', ',']
 
 
 def dispatch_expr(lexer):
@@ -769,7 +763,7 @@ def dispatch_expr(lexer):
 
 
 FIRST['dispatch_op'] = ['@', '.', '*', '/', '+', '-', '<=', '<', '=', '}', ';', 'in', ')', 'then', 'else', 'fi', 'loop',
-                         'pool', 'of', ',']
+                        'pool', 'of', ',']
 FOLLOW['dispatch_op'] = ['*', '/', '+', '-', '<=', '<', '=', '}', ';', 'in', ')', 'then', 'else', 'fi', 'loop',
                          'pool', 'of', ',']
 
@@ -838,7 +832,7 @@ def dispatch_type(lexer):
 FIRST['element'] = ['integer', 'string', 'true', 'false', '(', 'object_id', 'if', 'while', '{', 'let',
                     'case', 'new']
 FOLLOW['element'] = ['.', '@', '*', '/', '+', '-', '<=', '<', '=', '}', ';', 'in', ')', 'then', 'else', 'fi', 'loop',
-                    'pool', 'of', ',']
+                     'pool', 'of', ',']
 
 
 def element(lexer):
@@ -943,7 +937,7 @@ def element(lexer):
 
 FIRST['constant'] = ['integer', 'string', 'true', 'false']
 FOLLOW['constant'] = ['.', '@', '*', '/', '+', '-', '<=', '<', '=', '}', ';', 'in', ')', 'then', 'else', 'fi', 'loop',
-                    'pool', 'of', ',']
+                      'pool', 'of', ',']
 
 
 def constant(lexer):
@@ -1114,7 +1108,7 @@ FOLLOW['more_exprs'] = ['}']
 
 def more_exprs(lexer):
     """
-    * FIRST: object_id | integer | string | true | false | (  | if | while | { | let | case | new | ~ | isvoid | not | eps
+    * FIRST: object_id | integer | string | true | false | ( | if | while | { | let | case | new | ~ | isvoid | not | eps
     * FOLLOW: }
     MORE_EXPRS -> EXPR_LIST                   $$ FIRST_PLUS = object_id | integer | string | true | false | (  | if |
                                                             | while | { | let | case | new | ~ | isvoid | not

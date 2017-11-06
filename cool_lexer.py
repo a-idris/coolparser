@@ -4,7 +4,8 @@ import re
 
 
 class LexError(Exception):
-    pass
+    def __init__(self, invalid_token):
+        self.invalid_token = invalid_token
 
 
 def initialise_patterns():
@@ -72,6 +73,8 @@ Token = namedtuple('Token', 'name val line_no column_index line')
 line_no = 0
 column_index = 0
 current_line = ''
+peeked = False
+lookahead_buffer = Token('', '', 0, 0, '')
 
 
 def next_token(lexer):
@@ -80,9 +83,12 @@ def next_token(lexer):
     global line_no
     global column_index
     global current_line
+    global peeked
+    global lookahead_buffer
 
-    if line_no == 0:
-        line_no = lexer.lineno
+    if peeked:
+        peeked = False
+        return lookahead_buffer
 
     while True:
         lexeme = lexer.get_token()
@@ -92,17 +98,29 @@ def next_token(lexer):
             current_line = lexeme
         if lexeme == lexer.eof:
             return Token("eof", "eof", line_no, column_index, current_line)
-        token_name, matched_str = match_pattern(lexeme, lexer)
+
+        try:
+            token_name, matched_str = match_pattern(lexeme, lexer)
+        except LexError:
+            char = lexeme[0]
+            column_index += 1
+            if len(lexeme) > 1:
+                lexer.push_token(lexeme[1:])
+            raise LexError(Token('', char, line_no, column_index - 1, current_line))
+
         column_index += len(matched_str)
 
         if token_name != "whitespace":
-            return Token(token_name, matched_str, line_no, column_index - len(matched_str), current_line)
+            lookahead_buffer = Token(token_name, matched_str, line_no, column_index - len(matched_str), current_line)
+            return lookahead_buffer
 
 
 def peek_token(lexer):
+    global peeked
     nt = next_token(lexer)
+    peeked = True
     # push it back on the stack so the next call to next_token returns the same result
-    lexer.push_token(nt.val)
+    # lexer.push_token(nt.val)
     return nt
 
 
@@ -120,7 +138,7 @@ def match_pattern(lexeme, lexer):
 
     # if no matches, it's not a valid lexeme. raise error
     if len(matches) == 0:
-        raise LexError
+        raise LexError('')
 
     # find max based on length of matched string. if multiple of same value, max returns the first one so there is
     # automatic tie-breaking based on the insertion order in the OrderedDict
