@@ -42,7 +42,7 @@ def parse(filename):
         # program(lexer)
         # if len(errors) == 0:
         #
-        if program(lexer):
+        if program(lexer) and len(errors) == 0:
             print("No errors found")
             for class_summary in classes:
                 print(class_summary)
@@ -131,7 +131,7 @@ def match(lexer, follow, *terminals):
         if token.name == terminal:
             return True
     # no terminal matched.
-    error = error_msg(token, terminals)
+    error = error_msg(token, *terminals)
     errors.append(error)
     # recover
     return recover(lexer, follow, first=terminals)
@@ -148,9 +148,13 @@ def is_in_follow(nonterminal):
 
 
 def recover_multiple_first_plus(lexer, nonterminal):
+    # in case token doesn't match any of the first+ sets, discard tokens until reach either a token in the first+
+    # sets, follow set or eof
     if not recover_first(lexer, FIRST[nonterminal], FOLLOW[nonterminal]):
+        # if FOLLOW return true, thus parent can resume. if eof, then return false
         return is_in_follow(nonterminal)
     else:
+        # if the recover reached a token from one of the FIRST+ sets, run the function again and return the results
         return locals()[nonterminal](lexer) # call the nonterminal function based on its name
 
 
@@ -197,10 +201,7 @@ def program_rest(lexer):
     elif token.name in FOLLOW['program_rest']:
         return True
     else:
-        if not recover_first(lexer, FIRST["program_rest"], FOLLOW["program_rest"]):
-            return is_in_follow('program_rest')
-        else:
-            return program_rest(lexer)
+        return recover_multiple_first_plus(lexer, 'program_rest')
 
 
 FIRST['class'] = ['class']
@@ -220,7 +221,7 @@ def _class(lexer):
     else:
         # successful match
         token = next_token(lexer)
-        if not match(lexer, FOLLOW['class', "type_id"]):
+        if not match(lexer, FOLLOW['class'], "type_id"):
             return is_in_follow('class')
         else:
             class_name = token.val
@@ -271,10 +272,7 @@ def class_type(lexer):
     elif token.name in FOLLOW['class_type']:
         return True
     else:
-        if not recover_first(lexer, FIRST['class_type'], FOLLOW['class_type']):
-            return is_in_follow('class_type')
-        else:
-            return class_type(lexer)
+        return recover_multiple_first_plus(lexer, 'class_type')
 
 
 FIRST['feature_list'] = ['object_id', '}']
@@ -297,10 +295,8 @@ def feature_list(lexer):
     elif token.name in FOLLOW['feature_list']:
         return True
     else:
-        if not recover_first(lexer, FIRST['feature_list'], FOLLOW['feature_list']):
-            return is_in_follow('feature_list')
-        else:
-            return feature_list(lexer)
+        return recover_multiple_first_plus(lexer, 'feature_list')
+    return False
 
 
 FIRST['feature'] = ['object_id']
@@ -370,10 +366,8 @@ def feature_rest(lexer):
             token = next_token(lexer)
             return opt_expr_assignment(lexer), "attribute"
     else:
-        if not recover_first(lexer, FIRST['feature_rest'], FOLLOW['rest']):
-            return is_in_follow('feature_rest'), ""
-        else:
-            return feature_rest(lexer)
+        return recover_multiple_first_plus(lexer, 'feature_rest')
+    return False
 
 
 FIRST['opt_feature_args'] = ['object_id', ')']
@@ -393,10 +387,7 @@ def opt_feature_args(lexer):
     elif token.name in FOLLOW['opt_feature_args']:
         return True
     else:
-        if not recover_first(lexer, FIRST['opt_feature_args'], FOLLOW['opt_feature_args']):
-            return is_in_follow('opt_feature_args')
-        else:
-            return opt_feature_args(lexer)
+        return recover_multiple_first_plus(lexer, 'opt_feature_args')
 
 
 FIRST['feature_args'] = ['object_id']
@@ -434,10 +425,7 @@ def more_feature_args(lexer):
     elif token.name in FOLLOW['more_feature_args']:
         return True
     else:
-        if not match(lexer, FIRST['more_feature_args'], FOLLOW['more_feature_args']):
-            return is_in_follow('more_feature_args')
-        else:
-            return more_feature_args(lexer)
+        return recover_multiple_first_plus(lexer, 'more_feature_args')
     return False
 
 
@@ -458,10 +446,7 @@ def opt_expr_assignment(lexer):
     elif token.name in FOLLOW['opt_expr_assignment']:
         return True
     else:
-        if not match(lexer, FIRST['opt_expr_assignment'], FOLLOW['opt_expr_assignment']):
-            return is_in_follow('opt_expr_assignment')
-        else:
-            return opt_expr_assignment(lexer)
+        return recover_multiple_first_plus(lexer, 'opt_expr_assignment')
 
 
 FIRST['expr_assignment'] = ['<-']
@@ -539,10 +524,7 @@ def expr(lexer):
                         "isvoid", "not"]:
         return boolean_complement_expr(lexer)
     else:
-        if not recover_first(lexer, FIRST['expr'], FOLLOW['expr']):
-            return is_in_follow('expr')
-        else:
-            return expr(lexer)
+        return recover_multiple_first_plus(lexer, 'expr')
     return False
 
 
@@ -567,10 +549,7 @@ def boolean_complement_expr(lexer):
                         'new', '~', 'isvoid']:
         return comparison_expr(lexer)
     else:
-        if not recover_first(lexer, FIRST['boolean_complement_expr'], FOLLOW['boolean_complement_expr']):
-            return is_in_follow('boolean_complement_expr')
-        else:
-            return boolean_complement_expr(lexer)
+        return recover_multiple_first_plus(lexer, 'boolean_comparison_expr')
 
 
 FIRST['comparison_expr'] = ['integer', 'string', 'true', 'false', '(', 'object_id', 'if', 'while', '{', 'let', 'case',
@@ -621,14 +600,7 @@ def comparison_op(lexer):
     elif token.name in FOLLOW['comparison_op']:
         return True
     else:
-        # in case token doesn't match any of the first+ sets, discard tokens until reach either a token in the first+
-        # sets, follow set or eof
-        if not recover_first(lexer, FIRST['comparison_op'], FOLLOW['comparison_op']):
-            # if FOLLOW return true, thus parent can resume. if eof, then return false
-            return is_in_follow('comparison_op')
-        else:
-            # if the MATCH reached a token from one of the FIRST+ sets, run the function again and return the results
-            return comparison_op(lexer)
+        return recover_multiple_first_plus(lexer, 'comparison_op')
     return False
 
 
@@ -675,10 +647,7 @@ def add_op(lexer):
     elif token.name in FOLLOW['add_op']:
         return True
     else:
-        if not recover_first(lexer, FIRST['add_op'], FOLLOW['add_op']):
-            return is_in_follow('add_op')
-        else:
-            return add_op(lexer)
+        return recover_multiple_first_plus(lexer, 'add_op')
     return False
 
 
@@ -726,10 +695,7 @@ def mult_op(lexer):
     elif token.name in FOLLOW['mult_op']:
         return True
     else:
-        if not recover_first(lexer, FIRST['mult_op'], FOLLOW['mult_op']):
-            return is_in_follow('mult_op')
-        else:
-            return mult_op(lexer)
+        return recover_multiple_first_plus(lexer, 'mult_op')
     return False
 
 
@@ -737,7 +703,7 @@ FIRST['checkvoid_expr'] = ['integer', 'string', 'true', 'false', '(', 'object_id
                            'new', '~', 'isvoid']
 FOLLOW['checkvoid_expr'] = ['*', '/', '+', '-', '<=', '<', '=', '}', ';', 'in', ')', 'then', 'else', 'fi', 'loop',
                             'pool', 'of', ',']
-GOD FUCKING DMAMIT
+
 
 def checkvoid_expr(lexer):
     """
@@ -755,10 +721,7 @@ def checkvoid_expr(lexer):
                         'new', '~']:
         return integer_complement_expr(lexer)
     else:
-        if not recover_first(lexer, FIRST['checkvoid_expr'], FOLLOW['checkvoid_expr']):
-            return is_in_follow('checkvoid_expr')
-        else:
-            return checkvoid_expr(lexer)
+        return recover_multiple_first_plus(lexer, 'checkvoid_expr')
 
 
 FIRST['integer_complement_expr'] = ['integer', 'string', 'true', 'false', '(', 'object_id', 'if', 'while', '{', 'let',
@@ -769,7 +732,7 @@ FOLLOW['integer_complement_expr'] = ['*', '/', '+', '-', '<=', '<', '=', '}', ';
 
 def integer_complement_expr(lexer):
     """
-   * FIRST: integer | string | true | false | ( | object_id | if | while | { | let | case | new | ~
+    * FIRST: integer | string | true | false | ( | object_id | if | while | { | let | case | new | ~
     * FOLLOW: * | / | + | - | <= | < | = | } | ; | in | ) | then | else | fi | loop | pool | of | ,
     INTEGER_COMPLEMENT_EXPR -> ~ INTEGER_COMPLEMENT_EXPR          $$ FIRST_PLUS = ~
                             | DISPATCH_EXPR                       $$ FIRST_PLUS =  integer | string | true | false | ( |
@@ -782,7 +745,8 @@ def integer_complement_expr(lexer):
     elif token.name in ['integer', 'string', 'true', 'false', '(', 'object_id', 'if', 'while', '{', 'let', 'case',
                         'new']:
         return dispatch_expr(lexer)
-    raise Exception
+    else:
+        return recover_multiple_first_plus(lexer, 'integer_complement_expr')
 
 
 FIRST['dispatch_expr'] = ['integer', 'string', 'true', 'false', '(', 'object_id', 'if', 'while', '{', 'let',
@@ -801,12 +765,13 @@ def dispatch_expr(lexer):
     global token
     if element(lexer):
         return dispatch_op(lexer)
-    raise Exception
+    return False
 
 
-FIRST['dispatch_op'] = ['']
+FIRST['dispatch_op'] = ['@', '.', '*', '/', '+', '-', '<=', '<', '=', '}', ';', 'in', ')', 'then', 'else', 'fi', 'loop',
+                         'pool', 'of', ',']
 FOLLOW['dispatch_op'] = ['*', '/', '+', '-', '<=', '<', '=', '}', ';', 'in', ')', 'then', 'else', 'fi', 'loop',
-                        'pool', 'of', ',']
+                         'pool', 'of', ',']
 
 
 def dispatch_op(lexer):
@@ -820,24 +785,33 @@ def dispatch_op(lexer):
     global token
     if token.name == "@" or token.name == ".":
         if dispatch_type(lexer):
-            if token.name == ".":
+            if not match(lexer, FOLLOW['dispatch_op'], "."):
+                return is_in_follow('dispatch_op')
+            else:
                 token = next_token(lexer)
-                if token.name == "object_id":
+                if not match(lexer, FOLLOW['dispatch_op'], "object_id"):
+                    return is_in_follow('dispatch_op')
+                else:
                     token = next_token(lexer)
-                    if token.name == "(":
+                    if not match(lexer, FOLLOW['dispatch_op'], "("):
+                        return is_in_follow('dispatch_op')
+                    else:
                         token = next_token(lexer)
                         if opt_expr_args(lexer):
-                            if token.name == ")":
+                            if not match(lexer, FOLLOW['dispatch_op'], ")"):
+                                return is_in_follow('dispatch_op')
+                            else:
                                 token = next_token(lexer)
                                 return dispatch_op(lexer)
-    elif token.name in ['*', '/', '+', '-', '<=', '<', '=', '}', ';', 'in', ')', 'then', 'else', 'fi', 'loop',
-                        'pool', 'of', ',']:
+    elif token.name in FOLLOW['dispatch_op']:
         return True
-    raise Exception
+    else:
+        return recover_multiple_first_plus(lexer, 'dispatch_op')
+    return False
 
 
-FIRST['dispatch_type'] = ['']
-FOLLOW['dispatch_type'] = ['']
+FIRST['dispatch_type'] = ['@', '.']
+FOLLOW['dispatch_type'] = ['.']
 
 
 def dispatch_type(lexer):
@@ -850,12 +824,15 @@ def dispatch_type(lexer):
     global token
     if token.name == "@":
         token = next_token(lexer)
-        if token.name == "type_id":
+        if not match(lexer, FOLLOW['dispatch_type'], "type_id"):
+            return is_in_follow('dispatch_type')
+        else:
             token = next_token(lexer)
             return True
-    elif token.name == '.':
+    elif token.name in FOLLOW['dispatch_type']:
         return True
-    raise Exception
+    else:
+        return recover_multiple_first_plus(lexer, 'dispatch_type')
 
 
 FIRST['element'] = ['integer', 'string', 'true', 'false', '(', 'object_id', 'if', 'while', '{', 'let',
@@ -884,7 +861,9 @@ def element(lexer):
     elif token.name == "(":
         token = next_token(lexer)
         if expr(lexer):
-            if token.name == ")":
+            if not match(lexer, FOLLOW['element'], ")"):
+                return is_in_follow('element')
+            else:
                 token = next_token(lexer)
                 return True
     elif token.name == 'object_id':
@@ -893,51 +872,73 @@ def element(lexer):
     elif token.name == "if":
         token = next_token(lexer)
         if expr(lexer):
-            if token.name == "then":
+            if not match(lexer, FOLLOW['element'], "then"):
+                return is_in_follow('element')
+            else:
                 token = next_token(lexer)
                 if expr(lexer):
-                    if token.name == "else":
+                    if not match(lexer, FOLLOW['element'], "else"):
+                        return is_in_follow('element')
+                    else:
                         token = next_token(lexer)
                         if expr(lexer):
-                            if token.name == "fi":
+                            if not match(lexer, FOLLOW['element'], "fi"):
+                                return is_in_follow('element')
+                            else:
                                 token = next_token(lexer)
                                 return True
     elif token.name == "while":
         token = next_token(lexer)
         if expr(lexer):
-            if token.name == "loop":
+            if not match(lexer, FOLLOW['element'], "loop"):
+                return is_in_follow('element')
+            else:
                 token = next_token(lexer)
                 if expr(lexer):
-                    if token.name == "pool":
+                    if not match(lexer, FOLLOW['element'], "pool"):
+                        return is_in_follow('element')
+                    else:
                         token = next_token(lexer)
                         return True
     elif token.name == "{":
         token = next_token(lexer)
         if expr_list(lexer):
-            if token.name == "}":
+            if not match(lexer, FOLLOW['element'], "}"):
+                return is_in_follow('element')
+            else:
                 token = next_token(lexer)
                 return True
     elif token.name == "let":
         token = next_token(lexer)
         if let_args(lexer):
-            if token.name == "in":
+            if not match(lexer, FOLLOW['element'], "in"):
+                return is_in_follow('element')
+            else:
                 token = next_token(lexer)
                 return expr(lexer)
     elif token.name == "case":
         token = next_token(lexer)
         if expr(lexer):
-            if token.name == "of":
+            if not match(lexer, FOLLOW['element'], "of"):
+                return is_in_follow('element')
+            else:
                 token = next_token(lexer)
                 if case_args(lexer):
-                    if token.name == "esac":
+                    if not match(lexer, FOLLOW['element'], "esac"):
+                        return is_in_follow('element')
+                    else:
                         token = next_token(lexer)
                         return True
     elif token.name == "new":
         token = next_token(lexer)
-        if token.name == "type_id":
+        if not match(lexer, FOLLOW['element'], "type_id"):
+            return is_in_follow('element')
+        else:
             token = next_token(lexer)
             return True
-    raise Exception
+    else:
+        return recover_multiple_first_plus(lexer, 'element')
+    return False
 
 
 FIRST['constant'] = ['integer', 'string', 'true', 'false']
@@ -967,12 +968,13 @@ def constant(lexer):
     elif token.name == "false":
         token = next_token(lexer)
         return True
-    raise Exception
+    else:
+        return recover_multiple_first_plus(lexer, 'constant')
 
 
-FIRST['_id'] = ['']
-FOLLOW['_id'] = ['.', '@', '*', '/', '+', '-', '<=', '<', '=', '}', ';', 'in', ')', 'then', 'else', 'fi', 'loop',
-                'pool', 'of', ',']
+FIRST['_id'] = ['object_id']
+FOLLOW['_id'] = ['(', '<-', '.', '@', '*', '/', '+', '-', '<=', '<', '=', '}', ';', 'in', ')', 'then', 'else', 'fi',
+                 'loop', 'pool', 'of', ',']
 
 
 def _id(lexer):
@@ -982,15 +984,17 @@ def _id(lexer):
     ID -> object_id                                     $$ FIRST_PLUS = object_id
     """
     global token
-    if token.name == "object_id":
+    if not match(lexer, FOLLOW['_id'], "object_id"):
+        return is_in_follow('_id')
+    else:
         token = next_token(lexer)
         return True
-    raise Exception
 
 
-FIRST['id_op'] = ['']
+FIRST['id_op'] = ['(', '.', '@', '*', '/', '+', '-', '<=', '<', '=', '}', ';', 'in', ')', 'then', 'else', 'fi', 'loop',
+                  'pool', 'of', ',']
 FOLLOW['id_op'] = ['.', '@', '*', '/', '+', '-', '<=', '<', '=', '}', ';', 'in', ')', 'then', 'else', 'fi', 'loop',
-                    'pool', 'of', ',']
+                   'pool', 'of', ',']
 
 
 def id_op(lexer):
@@ -1005,13 +1009,16 @@ def id_op(lexer):
     if token.name == "(":
         token = next_token(lexer)
         if opt_expr_args(lexer):
-            if token.name == ")":
+            if not match(lexer, FOLLOW['id_op'], ")"):
+                return is_in_follow('id_op')
+            else:
                 token = next_token(lexer)
                 return True
-    elif token.name in ['.', '@', '*', '/', '+', '-', '<=', '<', '=', '}', ';', 'in', ')', 'then', 'else', 'fi',
-                        'loop','pool', 'of', ',']:
+    elif token.name in FOLLOW['id_op']:
         return True
-    raise Exception
+    else:
+        return recover_multiple_first_plus(lexer, 'id_op')
+    return False
 
 
 FIRST['opt_expr_args'] = ["object_id", "integer", "string", "true", "false", "(", "if", "while", "{", "let", "case",
@@ -1028,17 +1035,18 @@ def opt_expr_args(lexer):
                     | eps                         $$ FIRST_PLUS = )
     """
     global token
-    if token.name in ['object_id', 'integer', 'string', 'true', 'false', '(', '~', 'isvoid', 'not', 'if', 'while',
-                      '{', 'let', 'case', 'new']:
+    if token.name in ['object_id', 'integer', 'string', 'true', 'false', '(', 'if', 'while',
+                      '{', 'let', 'case', 'new', '~', 'isvoid', 'not']:
         return expr_args(lexer)
-    elif token.name == ")":
+    elif token.name in FOLLOW['opt_expr_args']:
         return True
-    raise Exception
+    else:
+        return recover_multiple_first_plus(lexer, 'opt_expr_args')
 
 
-FIRST['expr_args'] = ["object_id", "integer", "string", "true", "false", "(", "if", "while", "{", "let", "case",
-                      "new", "~", "isvoid", "not", ")"]
-FOLLOW['expr_args'] = ['']
+FIRST['expr_args'] = ["object_id", "integer", "string", "true", "false", "(", "if", "while", "{", "let", "case", "new",
+                      "~", "isvoid", "not", ")"]
+FOLLOW['expr_args'] = [')']
 
 
 def expr_args(lexer):
@@ -1051,11 +1059,11 @@ def expr_args(lexer):
     global token
     if expr(lexer):
         return more_expr_args(lexer)
-    raise Exception
+    return False
 
 
-FIRST['more_expr_args'] = ['']
-FOLLOW['more_expr_args'] = ['']
+FIRST['more_expr_args'] = [',', ')']
+FOLLOW['more_expr_args'] = [')']
 
 
 def more_expr_args(lexer):
@@ -1070,19 +1078,16 @@ def more_expr_args(lexer):
         token = next_token(lexer)
         if expr(lexer):
             return more_expr_args(lexer)
-        else:
-            error_msg("more_expr_args", lexer)
-    elif token.name == ")":
+    elif token.name in FOLLOW['more_expr_args']:
         return True
     else:
-        error_msg("more_expr_args", lexer)
-        return False
-    raise Exception
+        return recover_multiple_first_plus(lexer, 'more_expr_args')
+    return False
 
 
 FIRST['expr_list'] = ["object_id", "integer", "string", "true", "false", "(", "if", "while", "{", "let", "case",
                       "new", "~", "isvoid", "not"]
-FOLLOW['expr_list'] = ['']
+FOLLOW['expr_list'] = ['}']
 
 
 def expr_list(lexer):
@@ -1094,15 +1099,17 @@ def expr_list(lexer):
     """
     global token
     if expr(lexer):
-        if token.name ==";":
+        if not match(lexer, FOLLOW['expr_list'], ";"):
+            return is_in_follow('expr_list')
+        else:
             token = next_token(lexer)
             return more_exprs(lexer)
-    raise Exception
+    return False
 
 
 FIRST['more_exprs'] = ["object_id", "integer", "string", "true", "false", "(", "if", "while", "{", "let", "case",
                        "new", "~", "isvoid", "not", "}"]
-FOLLOW['more_exprs'] = ['']
+FOLLOW['more_exprs'] = ['}']
 
 
 def more_exprs(lexer):
@@ -1114,16 +1121,17 @@ def more_exprs(lexer):
                 | eps                         $$ FIRST_PLUS = }
     """
     global token
-    if token.name in ['object_id', 'integer', 'string', 'true', 'false', '(', '~', 'isvoid', 'not', 'if', 'while',
-                      '{', 'let', 'case', 'new']:
+    if token.name in ['object_id', 'integer', 'string', 'true', 'false', '(', 'if', 'while', '{', 'let', 'case', 'new',
+                      '~', 'isvoid', 'not']:
         return expr_list(lexer)
-    elif token.name == "}":
+    elif token.name in FOLLOW['more_exprs']:
         return True
-    raise Exception
+    else:
+        return recover_multiple_first_plus(lexer, 'more_exprs')
 
 
-FIRST['let_args'] = ['']
-FOLLOW['let_args'] = ['']
+FIRST['let_args'] = ['object_id']
+FOLLOW['let_args'] = ['in']
 
 
 def let_args(lexer):
@@ -1135,11 +1143,11 @@ def let_args(lexer):
     global token
     if let_arg(lexer):
         return more_let_args(lexer)
-    raise Exception
+    return False
 
 
-FIRST['more_let_args'] = ['']
-FOLLOW['more_let_args'] = ['']
+FIRST['more_let_args'] = [',', 'in']
+FOLLOW['more_let_args'] = ['in']
 
 
 def more_let_args(lexer):
@@ -1154,13 +1162,15 @@ def more_let_args(lexer):
         token = next_token(lexer)
         if let_arg(lexer):
             return more_let_args(lexer)
-    elif token.name == "in":
+    elif token.name in FOLLOW['more_let_args']:
         return True
-    raise Exception
+    else:
+        return recover_multiple_first_plus(lexer, 'more_let_args')
+    return False
 
 
-FIRST['let_arg'] = ['']
-FOLLOW['let_arg'] = ['']
+FIRST['let_arg'] = ['object_id']
+FOLLOW['let_arg'] = [',', 'in']
 
 
 def let_arg(lexer):
@@ -1170,18 +1180,23 @@ def let_arg(lexer):
     LET_ARG -> object_id : type_id OPT_EXPR_ASSIGNMENT   $$ FIRST_PLUS = object_id
     """
     global token
-    if token.name == "object_id":
+    if not match(lexer, FOLLOW['let_arg'], "object_id"):
+        return is_in_follow('let_arg')
+    else:
         token = next_token(lexer)
-        if token.name == ":":
+        if not match(lexer, FOLLOW['let_arg'], ":"):
+            return is_in_follow('let_arg')
+        else:
             token = next_token(lexer)
-            if token.name == "type_id":
+            if not match(lexer, FOLLOW['let_arg'], "type_id"):
+                return is_in_follow('let_arg')
+            else:
                 token = next_token(lexer)
                 return opt_expr_assignment(lexer)
-    raise Exception
 
 
-FIRST['case_args'] = ['']
-FOLLOW['case_args'] = ['']
+FIRST['case_args'] = ['object_id']
+FOLLOW['case_args'] = ['esac']
 
 
 def case_args(lexer):
@@ -1193,11 +1208,11 @@ def case_args(lexer):
     global token
     if case_arg(lexer):
         return more_case_args(lexer)
-    raise Exception
+    return False
 
 
-FIRST['more_case_args'] = ['']
-FOLLOW['more_case_args'] = ['']
+FIRST['more_case_args'] = ['object_id', 'esac']
+FOLLOW['more_case_args'] = ['esac']
 
 
 def more_case_args(lexer):
@@ -1210,13 +1225,14 @@ def more_case_args(lexer):
     global token
     if token.name == "object_id":
         return case_args(lexer)
-    elif token.name == "esac":
+    elif token.name in FOLLOW['more_case_args']:
         return True
-    raise Exception
+    else:
+        return recover_multiple_first_plus(lexer, 'more_case_args')
 
 
-FIRST['case_arg'] = ['']
-FOLLOW['case_arg'] = ['']
+FIRST['case_arg'] = ['object_id']
+FOLLOW['case_arg'] = ['object_id', 'esac']
 
 
 def case_arg(lexer):
@@ -1226,21 +1242,29 @@ def case_arg(lexer):
     CASE_ARG -> object_id : type_id => EXPR ;        $$ FIRST_PLUS = object_id
     """
     global token
-    if token.name == "object_id":
+    if not match(lexer, FOLLOW['case_arg'], "object_id"):
+        return is_in_follow('case_arg')
+    else:
         token = next_token(lexer)
-        if token.name == ":":
+        if not match(lexer, FOLLOW['case_arg'], ":"):
+            return is_in_follow('case_arg')
+        else:
             token = next_token(lexer)
-            if token.name == "type_id":
+            if not match(lexer, FOLLOW['case_arg'], "type_id"):
+                return is_in_follow('case_arg')
+            else:
                 token = next_token(lexer)
-                if token.name == "=>":
+                if not match(lexer, FOLLOW['case_arg'], "=>"):
+                    return is_in_follow('case_arg')
+                else:
                     token = next_token(lexer)
                     if expr(lexer):
-                        if token.name == ";":
+                        if not match(lexer, FOLLOW['case_arg'], ";"):
+                            return is_in_follow('case_arg')
+                        else:
                             token = next_token(lexer)
                             return True
-    else:
-        error = "Unexpected token {0} on line {1}, column {2}. Expected one of: object_id".format(token.val, '', '')
-        return False
+    return False
 
 
 if __name__ == "__main__":
