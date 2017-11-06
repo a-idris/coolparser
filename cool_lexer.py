@@ -29,8 +29,7 @@ def initialise_patterns():
     # add recognizers for symbols
     symbols = [";", ",", ":", "{", "}", "(", ")", "<-", "@", ".", "=>", "+", "-", "~", "*", "/", "<=", "<", "="]
     # can group by precedence e.g. addop, mulop, etc. also, consider 'full' string matching,
-    # since = will match for <= and =>.
-    # maybe just solve w/ ordering? or do "^{0}$".format(pattern)
+
     for symbol in symbols:
         regex = re.compile(re.escape(symbol))
         token_patterns[symbol] = regex
@@ -59,7 +58,7 @@ def initialise_patterns():
     token_patterns["string"] = regex
 
     # whitespace
-    regex = re.compile(r"\s")
+    regex = re.compile(r"[ \t]+")
     token_patterns["whitespace"] = regex
 
     return token_patterns
@@ -68,20 +67,36 @@ def initialise_patterns():
 # initialise patterns
 patterns = initialise_patterns()
 # use namedtuple to represent tokens
-Token = namedtuple('Token', 'name val')
+Token = namedtuple('Token', 'name val line_no column_index line')
+
+line_no = 0
+column_index = 0
+current_line = ''
 
 
 def next_token(lexer):
-    # candidate string, switch w/ lexeme types. pass lexeme type?
     # list, precompiled regexes. get string token from shlex then pass it thru, returnign lex error if necessary else
     # returning an encoding of a token types
-    lexeme = lexer.get_token()
-    # if there is an unmatched quote, append shlex tokens until the lexeme has a matched quote
-    while lexeme.count('"') == 1:
-        lexeme += lexer.get_token()
-    if lexeme == lexer.eof:
-        return Token("eof", "")
-    return match_pattern(lexeme, lexer)
+    global line_no
+    global column_index
+    global current_line
+
+    if line_no == 0:
+        line_no = lexer.lineno
+
+    while True:
+        lexeme = lexer.get_token()
+        if lexer.lineno - 1 != line_no:
+            line_no = lexer.lineno - 1  # line_no = lexer.lineno - 1
+            column_index = 0
+            current_line = lexeme
+        if lexeme == lexer.eof:
+            return Token("eof", "eof", line_no, column_index, current_line)
+        token_name, matched_str = match_pattern(lexeme, lexer)
+        column_index += len(matched_str)
+
+        if token_name != "whitespace":
+            return Token(token_name, matched_str, line_no, column_index - len(matched_str), current_line)
 
 
 def peek_token(lexer):
@@ -115,6 +130,4 @@ def match_pattern(lexeme, lexer):
     if len(matched_str) != len(lexeme):
         rest = lexeme[len(matched_str):]
         lexer.push_token(rest)
-    t = Token(token_name, matched_str)
-    return Token(token_name, matched_str)
-    # return Token(name=token_name, val=matched_str)
+    return token_name, matched_str
